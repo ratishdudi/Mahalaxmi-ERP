@@ -88,35 +88,35 @@ export default function BlockInward() {
 
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 24 },
-    label: { fontSize: 11, color: "#555", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
-    input: { width: "100%", padding: "10px 14px", background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 8, color: "#e8e8e8", fontSize: 14, boxSizing: "border-box" as const },
-    card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 16, padding: 24, marginBottom: 32 },
+    label: { fontSize: 11, color: "var(--text)", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
+    input: { width: "100%", padding: "10px 14px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
+    card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, marginBottom: 32 },
   };
 
   return (
     <div style={S.page}>
       <div style={{ marginBottom: 32, paddingTop: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Block Inward Entry</h1>
-        <p style={{ color: "#555", fontSize: 13, marginTop: 4 }}>Log every block that enters the factory gate.</p>
+        <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>Block Inward Entry</h1>
+        <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>Log every block that enters the factory gate.</p>
       </div>
 
       <div style={S.card}>
         {/* Auto Block Number */}
-        <div style={{ background: "#0a0a0a", border: "1px solid #c0392b33", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ background: "var(--bg)", border: "1px solid var(--accent-border)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={S.label}>Auto Block ID</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#c0392b" }}>{nextBlockNo}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--accent)" }}>{nextBlockNo}</div>
           </div>
-          <div style={{ fontSize: 11, color: "#555", textAlign: "right" }}>Auto-assigned<br />on save</div>
+          <div style={{ fontSize: 11, color: "var(--text)", textAlign: "right" }}>Auto-assigned<br />on save</div>
         </div>
 
         {/* Block Type */}
         <div style={{ marginBottom: 20 }}>
           <label style={S.label}>Block Type *</label>
           <div style={{ display: "flex", gap: 8 }}>
-            {[{ val: true, label: "🪨 Own Block", color: "#c0392b" }, { val: false, label: "🔧 Job Work", color: "#2980b9" }].map((opt) => (
+            {[{ val: true, label: "🪨 Own Block", color: "#ef4444" }, { val: false, label: "🔧 Job Work", color: "#3b82f6" }].map((opt) => (
               <button key={String(opt.val)} onClick={() => setIsOwnBlock(opt.val)}
-                style={{ flex: 1, padding: "10px 0", border: "1px solid", borderColor: isOwnBlock === opt.val ? opt.color : "#1e1e1e", background: isOwnBlock === opt.val ? `${opt.color}22` : "transparent", color: isOwnBlock === opt.val ? opt.color : "#555", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                style={{ flex: 1, padding: "10px 0", border: "1px solid", borderColor: isOwnBlock === opt.val ? opt.color : "var(--border)", background: isOwnBlock === opt.val ? `${opt.color}22` : "transparent", color: isOwnBlock === opt.val ? opt.color : "var(--text)", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
                 {opt.label}
               </button>
             ))}
@@ -128,11 +128,11 @@ export default function BlockInward() {
           <label style={S.label}>Stone Type *</label>
           <input value={stoneType} onChange={(e) => handleStoneTypeChange(e.target.value)} placeholder="Start typing e.g. Rajasthan..." style={S.input} />
           {suggestions.length > 0 && (
-            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1a1a1a", border: "1px solid #1e1e1e", borderRadius: 8, zIndex: 10 }}>
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 8, zIndex: 10 }}>
               {suggestions.map((s) => (
                 <div key={s} onClick={() => { setStoneType(s); setSuggestions([]); }}
-                  style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid #1e1e1e" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#222")}
+                  style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid var(--border)", color: "var(--text-h)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--border)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                   {s}
                 </div>
@@ -160,40 +160,40 @@ export default function BlockInward() {
         </div>
 
         {weightTons && landedCost && (
-          <div style={{ background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#555" }}>
-            💡 Cost per ton: <strong style={{ color: "#e8e8e8" }}>₹{Math.round(parseFloat(landedCost) / parseFloat(weightTons)).toLocaleString()}</strong>
+          <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "var(--text)" }}>
+            💡 Cost per ton: <strong style={{ color: "var(--text-h)" }}>₹{Math.round(parseFloat(landedCost) / parseFloat(weightTons)).toLocaleString()}</strong>
           </div>
         )}
 
         <button onClick={handleSubmit} disabled={loading}
-          style={{ width: "100%", padding: "12px 0", background: loading ? "#333" : "#c0392b", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
+          style={{ width: "100%", padding: "12px 0", background: loading ? "var(--border)" : "var(--accent)", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? "Saving..." : `⬇ Log Block ${nextBlockNo} Into Yard`}
         </button>
 
         {message && (
-          <div style={{ marginTop: 12, padding: "10px 14px", background: message.includes("✅") ? "#27ae6022" : "#c0392b22", borderRadius: 8, fontSize: 13, color: message.includes("✅") ? "#27ae60" : "#c0392b" }}>
+          <div style={{ marginTop: 12, padding: "10px 14px", background: message.includes("✅") ? "#22c55e22" : "#ef444422", borderRadius: 8, fontSize: 13, color: message.includes("✅") ? "#22c55e" : "#ef4444" }}>
             {message}
           </div>
         )}
       </div>
 
       {/* Blocks List */}
-      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Blocks in Yard ({blocks.length})</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: "var(--text-h)" }}>Blocks in Yard ({blocks.length})</h2>
       {blocks.length === 0 ? (
-        <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: 40, border: "1px dashed #1e1e1e", borderRadius: 12 }}>No blocks logged yet.</div>
+        <div style={{ color: "var(--text)", fontSize: 13, textAlign: "center", padding: 40, border: "1px dashed var(--border)", borderRadius: 12 }}>No blocks logged yet.</div>
       ) : (
         blocks.map((block) => (
-          <div key={block.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "14px 18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 8 }}>
+          <div key={block.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 8 }}>
             {[
-              { label: "Block ID", value: block.block_no, color: "#c0392b" },
+              { label: "Block ID", value: block.block_no, color: "#ef4444" },
               { label: "Stone Type", value: block.stone_type },
-              { label: "Type", value: block.is_own_block ? "Own" : "Job Work", color: block.is_own_block ? "#c0392b" : "#2980b9" },
+              { label: "Type", value: block.is_own_block ? "Own" : "Job Work", color: block.is_own_block ? "#ef4444" : "#3b82f6" },
               { label: "Weight", value: `${block.weight_tons}T` },
               { label: "Cost", value: `₹${block.landed_cost.toLocaleString()}` },
             ].map((col) => (
               <div key={col.label}>
-                <div style={{ fontSize: 10, color: "#555", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: col.color || "#e8e8e8" }}>{col.value}</div>
+                <div style={{ fontSize: 10, color: "var(--text)", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: col.color || "var(--text-h)" }}>{col.value}</div>
               </div>
             ))}
           </div>

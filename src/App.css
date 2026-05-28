@@ -1,18 +1,22 @@
 .counter {
   font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
+  padding: 10px 16px; /* Increased padding for a better interactive area */
+  border-radius: 6px;
   color: var(--accent);
   background: var(--accent-bg);
   border: 2px solid transparent;
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, background-color 0.3s;
   margin-bottom: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
   &:hover {
     border-color: var(--accent-border);
+    background: var(--accent-bg);
   }
   &:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 3px solid var(--accent); /* Thicker outline for clear visibility */
     outline-offset: 2px;
   }
 }
@@ -65,8 +69,8 @@
   flex-grow: 1;
 
   @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
+    padding: 36px 24px 28px; /* Slightly more breathing room on tablet/mobile */
+    gap: 20px;
   }
 }
 
@@ -79,14 +83,14 @@
     flex: 1 1 0;
     padding: 32px;
     @media (max-width: 1024px) {
-      padding: 24px 20px;
+      padding: 28px 24px;
     }
   }
 
   .icon {
     margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
+    width: 24px; /* Slightly larger icon */
+    height: 24px;
   }
 
   @media (max-width: 1024px) {
@@ -108,41 +112,49 @@
   list-style: none;
   padding: 0;
   display: flex;
-  gap: 8px;
+  gap: 12px; /* Increased space between items to avoid accidental taps */
   margin: 32px 0 0;
 
   .logo {
-    height: 18px;
+    height: 20px; /* Enhanced sizing */
   }
 
   a {
     color: var(--text-h);
     font-size: 16px;
-    border-radius: 6px;
+    border-radius: 8px; /* Smoother corner radius */
     background: var(--social-bg);
     display: flex;
-    padding: 6px 12px;
+    padding: 12px 20px; /* Significantly larger hit container for reliable selections */
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     text-decoration: none;
-    transition: box-shadow 0.3s;
+    transition: box-shadow 0.3s, background-color 0.2s;
 
     &:hover {
       box-shadow: var(--shadow);
+      background: var(--border); /* Visual feedback on hover */
     }
+    
+    &:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+
     .button-icon {
-      height: 18px;
-      width: 18px;
+      height: 20px;
+      width: 20px;
     }
   }
 
   @media (max-width: 1024px) {
-    margin-top: 20px;
+    margin-top: 24px;
     flex-wrap: wrap;
     justify-content: center;
+    gap: 14px;
 
     li {
-      flex: 1 1 calc(50% - 8px);
+      flex: 1 1 100%; /* Spans full width on small interfaces for quick access */
     }
 
     a {

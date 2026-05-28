@@ -2,11 +2,13 @@ import { useState } from "react";
 import BlockInward from "./BlockInward";
 import MachineSession from "./MachineSession";
 import YardView from "./YardView";
+import FinishedStock from "./FinishedStock";
 
 const TABS = [
   { id: "blocks", label: "Block Inward", icon: "🪨" },
   { id: "machines", label: "Machine Sessions", icon: "⚙️" },
   { id: "yard", label: "Yard View", icon: "📦" },
+  { id: "finished", label: "Finished Stock", icon: "✅" },
 ];
 
 export default function App() {
@@ -71,6 +73,7 @@ export default function App() {
         {activeTab === "blocks" && <BlockInward />}
         {activeTab === "machines" && <MachineSession />}
         {activeTab === "yard" && <YardView />}
+        {activeTab === "finished" && <FinishedStock />}
       </main>
     </div>
   );

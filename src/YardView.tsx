@@ -28,8 +28,11 @@ export default function YardView() {
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
 
- useEffect(() => { 
-    fetchBlocks(); 
+ useEffect(() => {
+    // 1. Initial load with spinner
+    fetchBlocks(true); 
+    
+    // 2. Keep your animation logic
     if (!document.getElementById("fancy-animations")) {
       const style = document.createElement("style");
       style.id = "fancy-animations";
@@ -41,16 +44,29 @@ export default function YardView() {
       `;
       document.head.appendChild(style);
     }
-  }, []);
 
-  async function fetchBlocks() {
-    setLoading(true);
+    // 3. Silent Heartbeat (Refreshes without spinner)
+    const interval = setInterval(() => {
+      if (!loading && document.visibilityState === 'visible') {
+        fetchBlocks(false); // Pass false for silent background refresh
+      }
+    }, 30000);
+
+    // Memory Guard
+    return () => clearInterval(interval);
+  }, []); // Empty array ensures this only runs once on mount
+
+ async function fetchBlocks(isInitial = false) {
+    if (isInitial) setLoading(true);
+    
     const { data } = await supabase
       .from("blocks")
       .select("*")
       .order("created_at", { ascending: false });
+      
     if (data) setBlocks(data);
-    setLoading(false);
+    
+    if (isInitial) setLoading(false);
   }
 
   const statusOptions = ["all", "yard", "cutting", "unpolished_stock", "polishing", "finished", "sold"];

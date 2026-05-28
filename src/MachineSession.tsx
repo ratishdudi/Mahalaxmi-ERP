@@ -50,30 +50,54 @@ export default function MachineSession() {
   const [_tick, setTick] = useState(0);
 
   useEffect(() => {
-    fetchBlocks();
-    fetchSessions();
-    const interval = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
+    // 1. Initial Load (Trigger the spinners)
+    fetchBlocks(true);
+    fetchSessions(true);
 
-  async function fetchBlocks() {
+    // 2. The Clock & Heartbeat
+    const interval = setInterval(() => {
+      setTick((t) => {
+        const nextTick = t + 1;
+        
+        // Every 30 seconds, trigger the silent sync (isInitial = false)
+        if (nextTick % 30 === 0 && !loading && document.visibilityState === 'visible') {
+          fetchBlocks(false);
+          fetchSessions(false);
+        }
+        
+        return nextTick;
+      });
+    }, 1000);
+
+    // 3. Memory Guard
+    return () => clearInterval(interval);
+  }, []); // Empty array: This runs once, and the interval handles the rest.
+  async function fetchBlocks(isInitial = false) {
+    if (isInitial) setLoading(true);
+    
     const { data } = await supabase
       .from("blocks")
       .select("id, block_no, stone_type, quarry_name, is_own_block, status")
       .in("status", ["yard", "unpolished_stock"])
       .order("created_at", { ascending: false });
+      
     if (data) setBlocks(data);
+    if (isInitial) setLoading(false);
   }
 
-  async function fetchSessions() {
+  async function fetchSessions(isInitial = false) {
+    if (isInitial) setLoading(true);
+    
     const { data } = await supabase
       .from("machine_sessions")
       .select("*")
       .order("started_at", { ascending: false });
+      
     if (data) {
       setActiveSessions(data.filter((s: Session) => !s.stopped_at));
       setCompletedSessions(data.filter((s: Session) => s.stopped_at).slice(0, 15));
     }
+    if (isInitial) setLoading(false);
   }
 
   function getLiveDuration(startedAt: string) {

@@ -77,31 +77,48 @@ export default function BlockInward() {
       : []);
   }
 
-  async function handleSubmit() {
+ async function handleSubmit() {
     if (!stoneType || !weightTons || !landedCost) {
       setMessage("❌ Please fill Stone Type, Weight and Cost.");
       return;
     }
+    
     setLoading(true);
     setMessage("");
-    await supabase.from("stone_varieties").upsert({ name: stoneType }, { onConflict: "name" });
-    const { error } = await supabase.from("blocks").insert({
-      block_no: nextBlockNo,
-      stone_type: stoneType,
-      quarry_name: quarryName,
-      weight_tons: parseFloat(weightTons),
-      landed_cost: parseFloat(landedCost),
-      is_own_block: isOwnBlock,
-      status: "yard",
-    });
-    setLoading(false);
-    if (error) {
-      setMessage("❌ " + error.message);
-    } else {
-      setMessage(`✅ Block ${nextBlockNo} logged!`);
-      setStoneType(""); setQuarryName(""); setWeightTons(""); setLandedCost("");
-      setIsOwnBlock(true);
-      fetchBlocks();
+
+    try {
+      // Keep your stone variety tracking active
+      await supabase.from("stone_varieties").upsert({ name: stoneType }, { onConflict: "name" });
+      
+      const { error } = await supabase.from("blocks").insert({
+        block_no: nextBlockNo,
+        stone_type: stoneType,
+        quarry_name: quarryName,
+        weight_tons: parseFloat(weightTons),
+        landed_cost: parseFloat(landedCost),
+        is_own_block: isOwnBlock,
+        status: "yard",
+      });
+
+      if (error) {
+        // If Supabase returns an error, show it but DO NOT wipe out what the user typed
+        setMessage("❌ " + error.message);
+        setLoading(false);
+      } else {
+        // Only clear the text inputs on a 100% successful save confirmation
+        setMessage(`✅ Block ${nextBlockNo} logged!`);
+        setStoneType(""); 
+        setQuarryName(""); 
+        setWeightTons(""); 
+        setLandedCost("");
+        setIsOwnBlock(true);
+        setLoading(false);
+        fetchBlocks();
+      }
+    } catch (err: any) {
+      // Safety catch-all for sudden mobile data disconnects
+      setMessage("❌ Network connection failed. Please try again.");
+      setLoading(false);
     }
   }
 

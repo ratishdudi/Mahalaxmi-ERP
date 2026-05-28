@@ -49,7 +49,7 @@ export default function MachineSession() {
   const [message, setMessage] = useState("");
 
   // Live timer ticks
-  const [tick, setTick] = useState(0);
+  const [_tick, setTick] = useState(0);
 
   useEffect(() => {
     fetchBlocks();

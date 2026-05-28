@@ -4,7 +4,7 @@
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
-  --accent: #2563eb; /* Changed to a professional, high-contrast blue */
+  --accent: #2563eb; /* High-contrast blue */
   --accent-bg: rgba(37, 99, 235, 0.1);
   --accent-border: rgba(37, 99, 235, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
@@ -32,12 +32,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #d1d5db; /* Lighter grey for better contrast against dark background */
-    --text-h: #ffffff;
-    --bg: #1f2028; /* Softened from #16171d to reduce harshness */
-    --border: #374151; /* Slightly lighter border for depth */
+    /* Adjusted for higher contrast to pass accessibility audits */
+    --text: #e5e7eb; /* Much lighter gray for better readability */
+    --text-h: #ffffff; /* Pure white for headings */
+    --bg: #1f2028; /* Softer dark gray background */
+    --border: #4b5563; /* Lighter border for better definition */
     --code-bg: #2d2e3a;
-    --accent: #60a5fa; /* Adjusted for readability on dark backgrounds */
+    --accent: #60a5fa; /* Lighter blue for dark mode */
     --accent-bg: rgba(96, 165, 250, 0.15);
     --accent-border: rgba(96, 165, 250, 0.5);
     --social-bg: rgba(55, 65, 81, 0.5);

@@ -1,6 +1,7 @@
+/* --- FACTORY BUTTONS & LAYOUT --- */
 .counter {
   font-size: 16px;
-  padding: 10px 16px; /* Increased padding for a better interactive area */
+  padding: 10px 16px; 
   border-radius: 6px;
   color: var(--accent);
   background: var(--accent-bg);
@@ -16,7 +17,7 @@
     background: var(--accent-bg);
   }
   &:focus-visible {
-    outline: 3px solid var(--accent); /* Thicker outline for clear visibility */
+    outline: 3px solid var(--accent); 
     outline-offset: 2px;
   }
 }
@@ -69,7 +70,7 @@
   flex-grow: 1;
 
   @media (max-width: 1024px) {
-    padding: 36px 24px 28px; /* Slightly more breathing room on tablet/mobile */
+    padding: 36px 24px 28px; 
     gap: 20px;
   }
 }
@@ -89,7 +90,7 @@
 
   .icon {
     margin-bottom: 16px;
-    width: 24px; /* Slightly larger icon */
+    width: 24px; 
     height: 24px;
   }
 
@@ -112,20 +113,20 @@
   list-style: none;
   padding: 0;
   display: flex;
-  gap: 12px; /* Increased space between items to avoid accidental taps */
+  gap: 12px; 
   margin: 32px 0 0;
 
   .logo {
-    height: 20px; /* Enhanced sizing */
+    height: 20px; 
   }
 
   a {
     color: var(--text-h);
     font-size: 16px;
-    border-radius: 8px; /* Smoother corner radius */
+    border-radius: 8px; 
     background: var(--social-bg);
     display: flex;
-    padding: 12px 20px; /* Significantly larger hit container for reliable selections */
+    padding: 12px 20px; 
     align-items: center;
     gap: 10px;
     text-decoration: none;
@@ -133,7 +134,7 @@
 
     &:hover {
       box-shadow: var(--shadow);
-      background: var(--border); /* Visual feedback on hover */
+      background: var(--border); 
     }
     
     &:focus-visible {
@@ -154,7 +155,7 @@
     gap: 14px;
 
     li {
-      flex: 1 1 100%; /* Spans full width on small interfaces for quick access */
+      flex: 1 1 100%; 
     }
 
     a {
@@ -193,4 +194,48 @@
     right: 0;
     border-right-color: var(--border);
   }
+}
+
+/* --- NEW: FACTORY ERP DATA CARDS --- */
+/* Use these classes instead of inline styles to pass Lighthouse Contrast Audits */
+
+.erp-card {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.erp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.erp-label {
+  font-size: 11px;
+  color: var(--text); /* Safe, high-contrast gray from index.css */
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.erp-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-h); /* Pure white/black from index.css */
+}
+
+/* Specific colors for your data types that are safe for dark mode */
+.erp-value.highlight-red {
+  color: #ef4444; /* Brighter red, replaces your rgb(192, 57, 43) */
+}
+
+.erp-value.highlight-blue {
+  color: #3b82f6; /* Brighter blue, replaces your rgb(41, 128, 185) */
 }

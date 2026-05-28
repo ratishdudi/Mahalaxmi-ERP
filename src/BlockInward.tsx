@@ -89,7 +89,8 @@ export default function BlockInward() {
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 24 },
     label: { fontSize: 11, color: "var(--text)", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
-    input: { width: "100%", padding: "10px 14px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
+    /* Added minHeight 44px for accessibility touch targets */
+    input: { width: "100%", padding: "10px 14px", minHeight: 44, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
     card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, marginBottom: 32 },
   };
 
@@ -116,7 +117,8 @@ export default function BlockInward() {
           <div style={{ display: "flex", gap: 8 }}>
             {[{ val: true, label: "🪨 Own Block", color: "#ef4444" }, { val: false, label: "🔧 Job Work", color: "#3b82f6" }].map((opt) => (
               <button key={String(opt.val)} onClick={() => setIsOwnBlock(opt.val)}
-                style={{ flex: 1, padding: "10px 0", border: "1px solid", borderColor: isOwnBlock === opt.val ? opt.color : "var(--border)", background: isOwnBlock === opt.val ? `${opt.color}22` : "transparent", color: isOwnBlock === opt.val ? opt.color : "var(--text)", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                /* Added minHeight 44px here */
+                style={{ flex: 1, padding: "10px 0", minHeight: 44, border: "1px solid", borderColor: isOwnBlock === opt.val ? opt.color : "var(--border)", background: isOwnBlock === opt.val ? `${opt.color}22` : "transparent", color: isOwnBlock === opt.val ? opt.color : "var(--text)", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
                 {opt.label}
               </button>
             ))}
@@ -131,7 +133,8 @@ export default function BlockInward() {
             <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 8, zIndex: 10 }}>
               {suggestions.map((s) => (
                 <div key={s} onClick={() => { setStoneType(s); setSuggestions([]); }}
-                  style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid var(--border)", color: "var(--text-h)" }}
+                  /* Added minHeight 44px here to ensure dropdown items are easy to tap */
+                  style={{ padding: "10px 14px", minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", fontSize: 13, borderBottom: "1px solid var(--border)", color: "var(--text-h)" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--border)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                   {s}
@@ -166,7 +169,8 @@ export default function BlockInward() {
         )}
 
         <button onClick={handleSubmit} disabled={loading}
-          style={{ width: "100%", padding: "12px 0", background: loading ? "var(--border)" : "var(--accent)", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
+          /* Added minHeight 44px here */
+          style={{ width: "100%", padding: "12px 0", minHeight: 44, background: loading ? "var(--border)" : "var(--accent)", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? "Saving..." : `⬇ Log Block ${nextBlockNo} Into Yard`}
         </button>
 

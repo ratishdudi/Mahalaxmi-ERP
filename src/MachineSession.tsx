@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 
 const MACHINES = [
-  { id: "14-blade", label: "14 Blade Cutter", icon: "⚙️", color: "#c0392b", type: "gangsaw" },
-  { id: "7-blade", label: "7 Blade Cutter", icon: "🔪", color: "#d4a843", type: "gangsaw" },
-  { id: "liner", label: "Liner Polish", icon: "✨", color: "#2980b9", type: "liner" },
+  // Updated hex codes for better dark mode contrast
+  { id: "14-blade", label: "14 Blade Cutter", icon: "⚙️", color: "#ef4444", type: "gangsaw" },
+  { id: "7-blade", label: "7 Blade Cutter", icon: "🔪", color: "#f59e0b", type: "gangsaw" },
+  { id: "liner", label: "Liner Polish", icon: "✨", color: "#3b82f6", type: "liner" },
 ];
 
 const OPERATORS = [
@@ -167,9 +168,9 @@ export default function MachineSession() {
 
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 16 },
-    label: { fontSize: 11, color: "#555", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
-    select: { width: "100%", padding: "10px 14px", background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 8, color: "#e8e8e8", fontSize: 14, boxSizing: "border-box" as const },
-    card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 16, padding: 20, marginBottom: 20 },
+    label: { fontSize: 11, color: "var(--text)", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
+    select: { width: "100%", padding: "10px 14px", minHeight: 44, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
+    card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 20, marginBottom: 20 },
   };
 
   const validBlocks = getValidBlocks();
@@ -179,8 +180,8 @@ export default function MachineSession() {
 
       {/* Header */}
       <div style={{ paddingTop: 20, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>⚙️ Machine Sessions</h1>
-        <p style={{ color: "#555", fontSize: 13, marginTop: 4 }}>Start and stop machine sessions. Every second is tracked.</p>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>⚙️ Machine Sessions</h1>
+        <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>Start and stop machine sessions. Every second is tracked.</p>
       </div>
 
       {/* Live Machine Status Cards */}
@@ -189,25 +190,25 @@ export default function MachineSession() {
           const activeSession = activeSessions.find((s) => s.machine_id === machine.id);
           const isActive = !!activeSession;
           return (
-            <div key={machine.id} style={{ background: "#111", border: `1px solid ${isActive ? machine.color : "#1e1e1e"}`, borderRadius: 14, padding: 14, transition: "all 0.3s" }}>
+            <div key={machine.id} style={{ background: "var(--code-bg)", border: `1px solid ${isActive ? machine.color : "var(--border)"}`, borderRadius: 14, padding: 14, transition: "all 0.3s" }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>{machine.icon}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>{machine.label}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, lineHeight: 1.3, color: "var(--text-h)" }}>{machine.label}</div>
               {isActive ? (
                 <>
                   <div style={{ fontSize: 9, color: machine.color, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>● ACTIVE</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 1 }}>{activeSession.stone_type}</div>
-                  <div style={{ fontSize: 10, color: "#555", marginBottom: 1 }}>{activeSession.block_no}</div>
-                  <div style={{ fontSize: 10, color: "#555", marginBottom: 10 }}>{activeSession.operator_name}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 1, color: "var(--text-h)" }}>{activeSession.stone_type}</div>
+                  <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 1 }}>{activeSession.block_no}</div>
+                  <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 10 }}>{activeSession.operator_name}</div>
                   <div style={{ fontSize: 16, fontWeight: 800, color: machine.color, marginBottom: 10, fontVariantNumeric: "tabular-nums" }}>
                     {getLiveDuration(activeSession.started_at)}
                   </div>
-                  <button onClick={() => handleStop(activeSession)}
-                    style={{ width: "100%", padding: "7px 0", background: machine.color, border: "none", borderRadius: 8, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  <button type="button" onClick={() => handleStop(activeSession)}
+                    style={{ width: "100%", padding: "7px 0", minHeight: 44, background: machine.color, border: "none", borderRadius: 8, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                     ⏹ STOP
                   </button>
                 </>
               ) : (
-                <div style={{ fontSize: 10, color: "#333", textTransform: "uppercase", letterSpacing: "0.1em" }}>● IDLE</div>
+                <div style={{ fontSize: 10, color: "var(--border)", textTransform: "uppercase", letterSpacing: "0.1em" }}>● IDLE</div>
               )}
             </div>
           );
@@ -216,7 +217,7 @@ export default function MachineSession() {
 
       {/* Start New Session Form */}
       <div style={S.card}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>▶ Start New Session</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, color: "var(--text-h)" }}>▶ Start New Session</h2>
 
         {/* Machine Selection */}
         <div style={{ marginBottom: 14 }}>
@@ -225,8 +226,8 @@ export default function MachineSession() {
             {MACHINES.map((m) => {
               const isActive = machineIsActive(m.id);
               return (
-                <button key={m.id} onClick={() => { if (!isActive) { setSelectedMachine(m.id); setSelectedBlock(""); } }}
-                  style={{ padding: "10px 6px", border: "1px solid", borderColor: selectedMachine === m.id ? m.color : isActive ? "#222" : "#1e1e1e", background: selectedMachine === m.id ? `${m.color}22` : "transparent", color: isActive ? "#333" : selectedMachine === m.id ? m.color : "#555", borderRadius: 8, cursor: isActive ? "not-allowed" : "pointer", fontSize: 10, fontWeight: 700, textAlign: "center" as const }}>
+                <button type="button" key={m.id} onClick={() => { if (!isActive) { setSelectedMachine(m.id); setSelectedBlock(""); } }}
+                  style={{ padding: "10px 6px", minHeight: 44, border: "1px solid", borderColor: selectedMachine === m.id ? m.color : isActive ? "var(--bg)" : "var(--border)", background: selectedMachine === m.id ? `${m.color}22` : "transparent", color: isActive ? "var(--border)" : selectedMachine === m.id ? m.color : "var(--text)", borderRadius: 8, cursor: isActive ? "not-allowed" : "pointer", fontSize: 10, fontWeight: 700, textAlign: "center" as const }}>
                   {m.icon}<br />{m.label}
                   {isActive && <div style={{ fontSize: 8, marginTop: 2 }}>RUNNING</div>}
                 </button>
@@ -234,7 +235,7 @@ export default function MachineSession() {
             })}
           </div>
           {selectedMachine && (
-            <div style={{ marginTop: 8, fontSize: 11, color: "#555", padding: "6px 10px", background: "#0a0a0a", borderRadius: 6 }}>
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text)", padding: "6px 10px", background: "var(--bg)", borderRadius: 6 }}>
               {MACHINES.find(m => m.id === selectedMachine)?.type === "gangsaw"
                 ? "⚙️ Gangsaw — shows blocks waiting in yard only"
                 : "✨ Liner — shows cut blocks awaiting polish only"}
@@ -254,7 +255,7 @@ export default function MachineSession() {
             ))}
           </select>
           {selectedMachine && validBlocks.length === 0 && (
-            <div style={{ marginTop: 6, fontSize: 11, color: "#d4a843" }}>
+            <div style={{ marginTop: 6, fontSize: 11, color: "#f59e0b" }}>
               ⚠ No eligible blocks for this machine right now.
             </div>
           )}
@@ -271,38 +272,38 @@ export default function MachineSession() {
           </select>
         </div>
 
-        <button onClick={handleStart} disabled={loading}
-          style={{ width: "100%", padding: "12px 0", background: loading ? "#333" : "#27ae60", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
+        <button type="button" onClick={handleStart} disabled={loading}
+          style={{ width: "100%", padding: "12px 0", minHeight: 44, background: loading ? "var(--border)" : "#22c55e", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? "Starting..." : "▶ START SESSION"}
         </button>
 
         {message && (
-          <div style={{ marginTop: 10, padding: "10px 14px", background: message.includes("✅") ? "#27ae6022" : "#c0392b22", borderRadius: 8, fontSize: 13, color: message.includes("✅") ? "#27ae60" : "#c0392b" }}>
+          <div style={{ marginTop: 10, padding: "10px 14px", background: message.includes("✅") ? "#22c55e22" : "#ef444422", borderRadius: 8, fontSize: 13, color: message.includes("✅") ? "#22c55e" : "#ef4444" }}>
             {message}
           </div>
         )}
       </div>
 
       {/* Completed Sessions — Hidden by default */}
-      <button onClick={() => setShowCompleted(!showCompleted)}
-        style={{ width: "100%", padding: "12px 0", background: "transparent", border: "1px solid #1e1e1e", borderRadius: 10, color: "#555", fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 16 }}>
+      <button type="button" onClick={() => setShowCompleted(!showCompleted)}
+        style={{ width: "100%", padding: "12px 0", minHeight: 44, background: "transparent", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 16 }}>
         {showCompleted ? "▲ Hide" : "▼ Show"} Recent Completed Sessions ({completedSessions.length})
       </button>
 
       {showCompleted && completedSessions.map((s) => {
         const machine = MACHINES.find((m) => m.id === s.machine_id);
         return (
-          <div key={s.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 8 }}>
+          <div key={s.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 8 }}>
             {[
               { label: "Machine", value: `${machine?.icon} ${machine?.label}`, color: machine?.color },
-              { label: "Block", value: s.block_no, color: "#c0392b" },
+              { label: "Block", value: s.block_no, color: "#ef4444" },
               { label: "Stone", value: s.stone_type },
               { label: "Operator", value: s.operator_name },
-              { label: "Duration", value: `${s.duration_mins} mins`, color: "#27ae60" },
+              { label: "Duration", value: `${s.duration_mins} mins`, color: "#22c55e" },
             ].map((col) => (
               <div key={col.label}>
-                <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: col.color || "#e8e8e8" }}>{col.value}</div>
+                <div style={{ fontSize: 9, color: "var(--text)", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: col.color || "var(--text-h)" }}>{col.value}</div>
               </div>
             ))}
           </div>

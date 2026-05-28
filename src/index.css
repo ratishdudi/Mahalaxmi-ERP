@@ -110,3 +110,15 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+/* Add these to index.css */
+.text-label { color: var(--text); }
+.text-value { color: var(--text-h); }
+.text-accent-red { color: #f87171; } /* Brighter red for contrast */
+.text-accent-blue { color: #60a5fa; } /* Brighter blue for contrast */
+
+/* Better touch targets for mobile */
+button { 
+  min-height: 44px; 
+  min-width: 44px; 
+  padding: 12px 16px; 
+}

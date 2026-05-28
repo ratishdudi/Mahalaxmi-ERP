@@ -40,14 +40,33 @@ export default function BlockInward() {
 
   useEffect(() => { fetchBlocks(); }, []);
 
-  async function fetchBlocks() {
-    const { data } = await supabase
-      .from("blocks")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) {
-      setBlocks(data);
-      setNextBlockNo(`MLG-${String(data.length + 1).padStart(3, "0")}`);
+ async function fetchBlocks() {
+    const { data } = await supabase
+      .from("blocks")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) {
+      setBlocks(data);
+      setNextBlockNo(`MLG-${String(data.length + 1).padStart(3, "0")}`);
+    }
+
+    // Inject fancy animation keyframes into the page header dynamically
+    if (!document.getElementById("fancy-animations")) {
+      const style = document.createElement("style");
+      style.id = "fancy-animations";
+      style.innerHTML = `
+        @keyframes fancyFadeIn {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes liveIndicator {
+          0% { opacity: 0.4; }
+          50% { opacity: 1; }
+          100% { opacity: 0.4; }
+        }
+        .live-pulse { animation: liveIndicator 1.5s infinite ease-in-out; }
+      `;
+      document.head.appendChild(style);
     }
   }
 
@@ -95,7 +114,7 @@ export default function BlockInward() {
   };
 
   return (
-    <div style={S.page}>
+    <div style={{ ...S.page, animation: "fancyFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}>
       <div style={{ marginBottom: 32, paddingTop: 24 }}>
         <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>Block Inward Entry</h1>
         <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>Log every block that enters the factory gate.</p>

@@ -176,8 +176,7 @@ export default function MachineSession() {
   const validBlocks = getValidBlocks();
 
   return (
-    <div style={S.page}>
-
+    <div style={{ ...S.page, animation: "fancyFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}>
       {/* Header */}
       <div style={{ paddingTop: 20, marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>⚙️ Machine Sessions</h1>

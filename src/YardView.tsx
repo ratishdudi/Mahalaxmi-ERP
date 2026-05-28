@@ -28,7 +28,20 @@ export default function YardView() {
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetchBlocks(); }, []);
+ useEffect(() => { 
+    fetchBlocks(); 
+    if (!document.getElementById("fancy-animations")) {
+      const style = document.createElement("style");
+      style.id = "fancy-animations";
+      style.innerHTML = `
+        @keyframes fancyFadeIn {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
 
   async function fetchBlocks() {
     setLoading(true);
@@ -52,8 +65,8 @@ export default function YardView() {
     finished: blocks.filter((b) => b.status === "finished").length,
   };
 
-  return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 16 }}>
+return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: 16, animation: "fancyFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}>
 
       {/* Header */}
       <div style={{ paddingTop: 20, marginBottom: 24 }}>
@@ -97,10 +110,29 @@ export default function YardView() {
       ) : filtered.length === 0 ? (
         <div style={{ color: "var(--text)", fontSize: 13, textAlign: "center", padding: 40, border: "1px dashed var(--border)", borderRadius: 12 }}>No blocks found.</div>
       ) : (
-        filtered.map((block) => {
+       filtered.map((block) => {
           const cfg = STATUS_CONFIG[block.status] || STATUS_CONFIG.yard;
           return (
-            <div key={block.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderLeft: `3px solid ${cfg.color}`, borderRadius: 12, padding: 16, marginBottom: 10 }}>
+            <div 
+              key={block.id} 
+              style={{ 
+                background: "var(--code-bg)", 
+                border: "1px solid var(--border)", 
+                borderLeft: `3px solid ${cfg.color}`, 
+                borderRadius: 12, 
+                padding: 16, 
+                marginBottom: 10,
+                transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)" 
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateX(4px)";
+                e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.15)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateX(0)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 800, color: "#ef4444" }}>{block.block_no}</div>
@@ -108,7 +140,7 @@ export default function YardView() {
                   {block.quarry_name && <div style={{ fontSize: 11, color: "var(--text)", marginTop: 1 }}>{block.quarry_name}</div>}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 10, background: `${cfg.color}22`, color: cfg.color, border: `1px solid ${cfg.color}44`, borderRadius: 6, padding: "3px 8px", fontWeight: 700 }}>
+                 <div style={{ fontSize: 10, background: `${cfg.color}22`, color: cfg.color, border: `1px solid ${cfg.color}44`, borderRadius: 6, padding: "3px 8px", fontWeight: 700, boxShadow: `0 0 12px ${cfg.color}22`, textTransform: "uppercase", letterSpacing: "0.03em" }}>
                     {cfg.icon} {cfg.label}
                   </div>
                   <div style={{ fontSize: 10, color: "var(--text)", marginTop: 6 }}>{block.is_own_block ? "Own Block" : "Job Work"}</div>

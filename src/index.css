@@ -4,9 +4,9 @@
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
+  --accent: #2563eb; /* Changed to a professional, high-contrast blue */
+  --accent-bg: rgba(37, 99, 235, 0.1);
+  --accent-border: rgba(37, 99, 235, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
@@ -32,15 +32,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
+    --text: #d1d5db; /* Lighter grey for better contrast against dark background */
+    --text-h: #ffffff;
+    --bg: #1f2028; /* Softened from #16171d to reduce harshness */
+    --border: #374151; /* Slightly lighter border for depth */
+    --code-bg: #2d2e3a;
+    --accent: #60a5fa; /* Adjusted for readability on dark backgrounds */
+    --accent-bg: rgba(96, 165, 250, 0.15);
+    --accent-border: rgba(96, 165, 250, 0.5);
+    --social-bg: rgba(55, 65, 81, 0.5);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }

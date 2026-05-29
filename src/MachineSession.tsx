@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
+import { STATUS } from "./constants";
 
 const MACHINES = [
-  // Updated hex codes for better dark mode contrast
-  { id: "14-blade", label: "14 Blade Cutter", icon: "⚙️", color: "#ef4444", type: "gangsaw" },
-  { id: "7-blade", label: "7 Blade Cutter", icon: "🔪", color: "#f59e0b", type: "gangsaw" },
+  { id: "14-blade", label: "14 Blade Cutter", icon: "⚙️", color: "#f59e0b", type: "gangsaw" },
+  { id: "7-blade", label: "7 Blade Cutter", icon: "🔪", color: "#ef4444", type: "gangsaw" },
   { id: "liner", label: "Liner Polish", icon: "✨", color: "#3b82f6", type: "liner" },
 ];
 
@@ -40,87 +40,65 @@ type Session = {
 export default function MachineSession() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
-  const [showCompleted, setShowCompleted] = useState(false);
   const [completedSessions, setCompletedSessions] = useState<Session[]>([]);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState("");
   const [selectedBlock, setSelectedBlock] = useState("");
   const [selectedOperator, setSelectedOperator] = useState("");
   const [loading, setLoading] = useState(false);
+  const [stopLoading, setStopLoading] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [_tick, setTick] = useState(0);
 
   useEffect(() => {
-    // 1. Initial Load (Trigger the spinners)
-    fetchBlocks(true);
-    fetchSessions(true);
-
-    // 2. The Clock & Heartbeat
-    const interval = setInterval(() => {
-      setTick((t) => {
-        const nextTick = t + 1;
-        
-        // Every 30 seconds, trigger the silent sync (isInitial = false)
-        if (nextTick % 30 === 0 && !loading && document.visibilityState === 'visible') {
-          fetchBlocks(false);
-          fetchSessions(false);
-        }
-        
-        return nextTick;
-      });
-    }, 1000);
-
-    // 3. Memory Guard
+    fetchBlocks();
+    fetchSessions();
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
-  }, []); // Empty array: This runs once, and the interval handles the rest.
-  async function fetchBlocks(isInitial = false) {
-    if (isInitial) setLoading(true);
-    
+  }, []);
+
+  async function fetchBlocks() {
     const { data } = await supabase
       .from("blocks")
       .select("id, block_no, stone_type, quarry_name, is_own_block, status")
-      .in("status", ["yard", "unpolished_stock"])
+      .in("status", [STATUS.YARD, STATUS.UNPOLISHED])
       .order("created_at", { ascending: false });
-      
     if (data) setBlocks(data);
-    if (isInitial) setLoading(false);
   }
 
-  async function fetchSessions(isInitial = false) {
-    if (isInitial) setLoading(true);
-    
+  async function fetchSessions() {
     const { data } = await supabase
       .from("machine_sessions")
       .select("*")
       .order("started_at", { ascending: false });
-      
     if (data) {
       setActiveSessions(data.filter((s: Session) => !s.stopped_at));
-      setCompletedSessions(data.filter((s: Session) => s.stopped_at).slice(0, 15));
+      setCompletedSessions(data.filter((s: Session) => !!s.stopped_at).slice(0, 15));
     }
-    if (isInitial) setLoading(false);
   }
 
   function getLiveDuration(startedAt: string) {
     const diffMs = Date.now() - new Date(startedAt).getTime();
-    const mins = Math.floor(diffMs / 60000);
-    const secs = Math.floor((diffMs % 60000) / 1000);
-    const hours = Math.floor(mins / 60);
-    const remainMins = mins % 60;
-    if (hours > 0) return `${hours}h ${remainMins}m ${secs}s`;
-    return `${remainMins}m ${secs}s`;
+    const totalSecs = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+    return `${mins}m ${secs}s`;
   }
 
   function machineIsActive(machineId: string) {
     return activeSessions.some((s) => s.machine_id === machineId);
   }
 
-  // Which blocks are valid for selected machine
   function getValidBlocks() {
     const machine = MACHINES.find((m) => m.id === selectedMachine);
-    if (!machine) return blocks;
-    if (machine.type === "gangsaw") return blocks.filter((b) => b.status === "yard");
-    if (machine.type === "liner") return blocks.filter((b) => b.status === "unpolished_stock");
-    return blocks;
+    if (!machine) return [];
+    if (machine.type === "gangsaw") 
+      return blocks.filter((b) => b.status === STATUS.YARD);
+    if (machine.type === "liner") 
+      return blocks.filter((b) => b.status === STATUS.UNPOLISHED);
+    return [];
   }
 
   async function handleStart() {
@@ -136,24 +114,41 @@ export default function MachineSession() {
     const machine = MACHINES.find((m) => m.id === selectedMachine);
     const block = blocks.find((b) => b.id === selectedBlock);
 
-    // Validate machine-block combination
-    if (machine?.type === "gangsaw" && block?.status !== "yard") {
-      setMessage("❌ Gangsaws can only accept blocks with status 'Waiting in Yard'.");
+    if (machine?.type === "gangsaw" && block?.status !== STATUS.YARD) {
+      setMessage("❌ Gangsaws only accept blocks waiting in yard.");
       return;
     }
-    if (machine?.type === "liner" && block?.status !== "unpolished_stock") {
-      setMessage("❌ Liner can only accept blocks with status 'Cut — Awaiting Polish'.");
+    if (machine?.type === "liner" && block?.status !== STATUS.UNPOLISHED) {
+      setMessage("❌ Liner only accepts cut blocks awaiting polish.");
       return;
     }
 
     setLoading(true);
     setMessage("");
 
-    // Update block status to cutting/polishing
-    const newStatus = machine?.type === "gangsaw" ? "cutting" : "polishing";
-    await supabase.from("blocks").update({ status: newStatus }).eq("id", selectedBlock);
+    let newBlockStatus;
+    if (machine?.type === "gangsaw") {
+      newBlockStatus = STATUS.CUTTING;
+    } else if (machine?.type === "liner") {
+      newBlockStatus = STATUS.POLISHING;
+    } else {
+      setMessage("❌ Error: Unknown machine type.");
+      setLoading(false);
+      return;
+    }
+    
+    const { error: blockError } = await supabase
+      .from("blocks")
+      .update({ status: newBlockStatus })
+      .eq("id", selectedBlock);
 
-    const { error } = await supabase.from("machine_sessions").insert({
+    if (blockError) {
+      setMessage("❌ Failed to update block status: " + blockError.message);
+      setLoading(false);
+      return;
+    }
+
+    const { error: sessionError } = await supabase.from("machine_sessions").insert({
       block_id: selectedBlock,
       block_no: block?.block_no,
       stone_type: block?.stone_type,
@@ -165,30 +160,70 @@ export default function MachineSession() {
     });
 
     setLoading(false);
-    if (error) {
-      setMessage("❌ " + error.message);
+
+    if (sessionError) {
+      await supabase.from("blocks").update({ status: block?.status }).eq("id", selectedBlock);
+      setMessage("❌ " + sessionError.message);
     } else {
       setMessage("✅ Session started!");
-      setSelectedMachine(""); setSelectedBlock(""); setSelectedOperator("");
-      fetchBlocks(); fetchSessions();
+      setSelectedMachine("");
+      setSelectedBlock("");
+      setSelectedOperator("");
+      fetchBlocks();
+      fetchSessions();
     }
   }
 
   async function handleStop(session: Session) {
+    setStopLoading(session.id);
+
     const stoppedAt = new Date().toISOString();
-    const durationMins = Math.round((new Date(stoppedAt).getTime() - new Date(session.started_at).getTime()) / 60000);
     const machine = MACHINES.find((m) => m.id === session.machine_id);
+    
+    let nextBlockStatus;
+    if (machine?.type === "gangsaw") {
+      nextBlockStatus = STATUS.UNPOLISHED;
+    } else if (machine?.type === "liner") {
+      nextBlockStatus = STATUS.FINISHED;
+    } else {
+      setMessage("❌ Error: Machine type unrecognized. Cannot determine next status.");
+      setStopLoading(null);
+      return; 
+    }
 
-    // Transition block to next status
-    const nextStatus = machine?.type === "gangsaw" ? "unpolished_stock" : "finished";
-    await supabase.from("blocks").update({ status: nextStatus }).eq("id", session.block_id);
+    const { error: blockError } = await supabase
+      .from("blocks")
+      .update({ status: nextBlockStatus })
+      .eq("id", session.block_id);
 
-    await supabase.from("machine_sessions")
+    if (blockError) {
+      setMessage("❌ Failed: " + blockError.message);
+      setStopLoading(null);
+      return;
+    }
+
+    const durationMins = Math.round(
+      (new Date(stoppedAt).getTime() - new Date(session.started_at).getTime()) / 60000
+    );
+
+    const { error: sessionError } = await supabase
+      .from("machine_sessions")
       .update({ stopped_at: stoppedAt, duration_mins: durationMins })
       .eq("id", session.id);
 
-    fetchBlocks(); fetchSessions();
+    if (sessionError) {
+      setMessage("❌ Session close failed: " + sessionError.message);
+      setStopLoading(null);
+      return;
+    }
+
+    setMessage(`✅ Block moved to: ${nextBlockStatus === STATUS.UNPOLISHED ? "Cut — Awaiting Polish" : "Finished"}`);
+    setStopLoading(null);
+    await fetchBlocks();
+    await fetchSessions();
   }
+
+  const validBlocks = getValidBlocks();
 
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 16 },
@@ -197,26 +232,23 @@ export default function MachineSession() {
     card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 20, marginBottom: 20 },
   };
 
-  const validBlocks = getValidBlocks();
-
   return (
-    <div style={{ ...S.page, animation: "fancyFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}>
-      {/* Header */}
+    <div style={S.page}>
       <div style={{ paddingTop: 20, marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>⚙️ Machine Sessions</h1>
-        <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>Start and stop machine sessions. Every second is tracked.</p>
+        <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>Start and stop sessions. Status updates automatically.</p>
       </div>
 
-      {/* Live Machine Status Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 24 }}>
         {MACHINES.map((machine) => {
           const activeSession = activeSessions.find((s) => s.machine_id === machine.id);
           const isActive = !!activeSession;
+          const isStopping = activeSession && stopLoading === activeSession.id;
           return (
             <div key={machine.id} style={{ background: "var(--code-bg)", border: `1px solid ${isActive ? machine.color : "var(--border)"}`, borderRadius: 14, padding: 14, transition: "all 0.3s" }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>{machine.icon}</div>
               <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, lineHeight: 1.3, color: "var(--text-h)" }}>{machine.label}</div>
-              {isActive ? (
+              {isActive && activeSession ? (
                 <>
                   <div style={{ fontSize: 9, color: machine.color, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>● ACTIVE</div>
                   <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 1, color: "var(--text-h)" }}>{activeSession.stone_type}</div>
@@ -225,32 +257,46 @@ export default function MachineSession() {
                   <div style={{ fontSize: 16, fontWeight: 800, color: machine.color, marginBottom: 10, fontVariantNumeric: "tabular-nums" }}>
                     {getLiveDuration(activeSession.started_at)}
                   </div>
-                  <button type="button" onClick={() => handleStop(activeSession)}
-                    style={{ width: "100%", padding: "7px 0", minHeight: 44, background: machine.color, border: "none", borderRadius: 8, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    ⏹ STOP
+                  <button
+                    onClick={() => handleStop(activeSession)}
+                    disabled={!!isStopping}
+                    style={{ width: "100%", padding: "8px 0", minHeight: 44, background: isStopping ? "#333" : machine.color, border: "none", borderRadius: 8, color: "white", fontSize: 11, fontWeight: 700, cursor: isStopping ? "not-allowed" : "pointer" }}
+                  >
+                    {isStopping ? "Stopping..." : "⏹ STOP"}
                   </button>
                 </>
               ) : (
-                <div style={{ fontSize: 10, color: "var(--border)", textTransform: "uppercase", letterSpacing: "0.1em" }}>● IDLE</div>
+                <div style={{ fontSize: 10, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em" }}>● IDLE</div>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Start New Session Form */}
+      <div style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 11, color: "var(--text)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ color: "#9ca3af" }}>⏳ Yard</span>
+        <span>→</span>
+        <span style={{ color: "#f59e0b" }}>⚙️ Cutting</span>
+        <span>→</span>
+        <span style={{ color: "#3b82f6" }}>🔵 Awaiting Polish</span>
+        <span>→</span>
+        <span style={{ color: "#a855f7" }}>✨ Polishing</span>
+        <span>→</span>
+        <span style={{ color: "#22c55e" }}>✅ Finished</span>
+      </div>
+
       <div style={S.card}>
         <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, color: "var(--text-h)" }}>▶ Start New Session</h2>
 
-        {/* Machine Selection */}
         <div style={{ marginBottom: 14 }}>
           <label style={S.label}>Select Machine *</label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
             {MACHINES.map((m) => {
               const isActive = machineIsActive(m.id);
               return (
-                <button type="button" key={m.id} onClick={() => { if (!isActive) { setSelectedMachine(m.id); setSelectedBlock(""); } }}
-                  style={{ padding: "10px 6px", minHeight: 44, border: "1px solid", borderColor: selectedMachine === m.id ? m.color : isActive ? "var(--bg)" : "var(--border)", background: selectedMachine === m.id ? `${m.color}22` : "transparent", color: isActive ? "var(--border)" : selectedMachine === m.id ? m.color : "var(--text)", borderRadius: 8, cursor: isActive ? "not-allowed" : "pointer", fontSize: 10, fontWeight: 700, textAlign: "center" as const }}>
+                <button key={m.id}
+                  onClick={() => { if (!isActive) { setSelectedMachine(m.id); setSelectedBlock(""); } }}
+                  style={{ padding: "10px 6px", minHeight: 56, border: "1px solid", borderColor: selectedMachine === m.id ? m.color : isActive ? "#222" : "var(--border)", background: selectedMachine === m.id ? `${m.color}22` : "transparent", color: isActive ? "#333" : selectedMachine === m.id ? m.color : "var(--text)", borderRadius: 8, cursor: isActive ? "not-allowed" : "pointer", fontSize: 10, fontWeight: 700, textAlign: "center" }}>
                   {m.icon}<br />{m.label}
                   {isActive && <div style={{ fontSize: 8, marginTop: 2 }}>RUNNING</div>}
                 </button>
@@ -260,13 +306,12 @@ export default function MachineSession() {
           {selectedMachine && (
             <div style={{ marginTop: 8, fontSize: 11, color: "var(--text)", padding: "6px 10px", background: "var(--bg)", borderRadius: 6 }}>
               {MACHINES.find(m => m.id === selectedMachine)?.type === "gangsaw"
-                ? "⚙️ Gangsaw — shows blocks waiting in yard only"
-                : "✨ Liner — shows cut blocks awaiting polish only"}
+                ? "⚙️ Shows blocks waiting in yard only"
+                : "✨ Shows cut blocks awaiting polish only"}
             </div>
           )}
         </div>
 
-        {/* Block Selection */}
         <div style={{ marginBottom: 14 }}>
           <label style={S.label}>Select Block *</label>
           <select value={selectedBlock} onChange={(e) => setSelectedBlock(e.target.value)} style={S.select}>
@@ -284,7 +329,6 @@ export default function MachineSession() {
           )}
         </div>
 
-        {/* Operator */}
         <div style={{ marginBottom: 16 }}>
           <label style={S.label}>Operator *</label>
           <select value={selectedOperator} onChange={(e) => setSelectedOperator(e.target.value)} style={S.select}>
@@ -295,7 +339,7 @@ export default function MachineSession() {
           </select>
         </div>
 
-        <button type="button" onClick={handleStart} disabled={loading}
+        <button onClick={handleStart} disabled={loading}
           style={{ width: "100%", padding: "12px 0", minHeight: 44, background: loading ? "var(--border)" : "#22c55e", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? "Starting..." : "▶ START SESSION"}
         </button>
@@ -307,10 +351,9 @@ export default function MachineSession() {
         )}
       </div>
 
-      {/* Completed Sessions — Hidden by default */}
-      <button type="button" onClick={() => setShowCompleted(!showCompleted)}
+      <button onClick={() => setShowCompleted(!showCompleted)}
         style={{ width: "100%", padding: "12px 0", minHeight: 44, background: "transparent", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 16 }}>
-        {showCompleted ? "▲ Hide" : "▼ Show"} Recent Completed Sessions ({completedSessions.length})
+        {showCompleted ? "▲ Hide" : "▼ Show"} Completed Sessions ({completedSessions.length})
       </button>
 
       {showCompleted && completedSessions.map((s) => {

@@ -3,38 +3,32 @@ import { supabase } from "../supabaseClient";
 
 type Message = { role: "user" | "ai"; content: string };
 
-// --- Custom Icons ---
-const SendIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="22" y1="2" x2="11" y2="13"></line>
-    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-  </svg>
-);
-
-const UserAvatar = () => (
-  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#4b5563", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-    👤
-  </div>
-);
-
-const AiAvatar = () => (
-  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#8b5cf6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-    ✨
-  </div>
-);
-
 export default function AiAssistant() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Load saved history 
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = localStorage.getItem("factoryChatHistory");
     return saved ? JSON.parse(saved) : [{ role: "ai", content: "Hello. I am the Mahalaxmi Command AI. How can I help you analyze the factory today?" }];
   });
 
-  // 2. Auto-save and auto-scroll
+  // Inject animations once
+  useEffect(() => {
+    const styleId = "ai-chat-styles";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.innerHTML = `
+        .thinking-pulse { animation: pulse 1.5s infinite ease-in-out; }
+        @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        .chat-scrollbar::-webkit-scrollbar { width: 6px; }
+        .chat-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("factoryChatHistory", JSON.stringify(messages));
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,99 +40,69 @@ export default function AiAssistant() {
 
     const userMessage: Message = { role: "user", content: prompt };
     setMessages((prev) => [...prev, userMessage]);
-    setPrompt(""); 
+    setPrompt("");
     setLoading(true);
 
     const { data, error } = await supabase.functions.invoke('factory-ai', {
-      body: { prompt: userMessage.content } 
+      body: { prompt: userMessage.content }
     });
 
-    if (error) {
-      setMessages((prev) => [...prev, { role: "ai", content: "❌ Connection Error: " + error.message }]);
-    } else {
-      setMessages((prev) => [...prev, { role: "ai", content: data.message }]);
-    }
-    
+    setMessages((prev) => [...prev, { role: "ai", content: error ? "❌ Error: " + error.message : data.message }]);
     setLoading(false);
   }
 
-  // --- High-End LLM Styles ---
-  const S: Record<string, React.CSSProperties> = {
-    layout: { display: "flex", flexDirection: "column", height: "88vh", background: "#111111", color: "#ececec", fontFamily: "system-ui, -apple-system, sans-serif" },
-    header: { padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #2a2a2a" },
-    title: { fontSize: 16, fontWeight: 600, margin: 0, color: "#a1a1aa", letterSpacing: "0.5px" },
-    clearBtn: { background: "none", border: "none", color: "#71717a", cursor: "pointer", fontSize: 13, padding: "4px 8px", borderRadius: 4, transition: "0.2s" },
-    
-    chatScrollArea: { flex: 1, overflowY: "auto", padding: "24px 0" },
-    messageContainer: { maxWidth: 768, margin: "0 auto", padding: "16px 24px", display: "flex", gap: 16, lineHeight: 1.6, fontSize: 15 },
-    messageContent: { flex: 1, whiteSpace: "pre-wrap", paddingTop: 4, color: "#e4e4e7" },
-    
-    inputWrapper: { padding: "24px", background: "linear-gradient(180deg, transparent, #111111 20%)" },
-    inputContainer: { maxWidth: 768, margin: "0 auto", position: "relative", display: "flex", alignItems: "flex-end", background: "#212121", borderRadius: 24, border: "1px solid #3f3f46", padding: "8px 16px" },
-    input: { flex: 1, background: "transparent", border: "none", color: "#ececec", fontSize: 15, padding: "10px 0", outline: "none", resize: "none", minHeight: 24, maxHeight: 200, fontFamily: "inherit" },
-    sendBtn: { background: prompt.trim() ? "#ececec" : "#3f3f46", color: "#111111", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: prompt.trim() ? "pointer" : "default", transition: "0.2s", marginLeft: 12, marginBottom: 6 }
-  };
-
   return (
-    <div style={S.layout}>
-      {/* Subtle Header */}
-      <div style={S.header}>
-        <h2 style={S.title}>MAHALAXMI COMMAND AI</h2>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0a0a0a", color: "#e4e4e7", fontFamily: "'Inter', sans-serif" }}>
+      
+      {/* Header */}
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid #1f1f1f", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#71717a", letterSpacing: "1px" }}>MAHALAXMI INTELLIGENCE</span>
         <button 
-          onClick={() => { if(window.confirm("Clear all memories?")) { setMessages([{ role: "ai", content: "Memory cleared. What's next?" }]); localStorage.removeItem("factoryChatHistory"); } }} 
-          style={S.clearBtn}
-          onMouseOver={(e) => e.currentTarget.style.color = "#ececec"}
-          onMouseOut={(e) => e.currentTarget.style.color = "#71717a"}
+          onClick={() => { setMessages([{ role: "ai", content: "Memory reset." }]); localStorage.removeItem("factoryChatHistory"); }}
+          style={{ background: "transparent", border: "1px solid #27272a", color: "#a1a1aa", fontSize: 11, padding: "4px 8px", borderRadius: 6, cursor: "pointer" }}
         >
-          Clear Chat
+          Clear
         </button>
       </div>
 
-      {/* Chat Area */}
-      <div style={S.chatScrollArea} className="hide-scrollbar">
-        {messages.map((msg, index) => (
-          <div key={index} style={{ background: msg.role === "user" ? "transparent" : "#1a1a1a", borderBottom: msg.role === "ai" ? "1px solid #2a2a2a" : "none", borderTop: msg.role === "ai" ? "1px solid #2a2a2a" : "none" }}>
-            <div style={S.messageContainer}>
-              {msg.role === "user" ? <UserAvatar /> : <AiAvatar />}
-              <div style={S.messageContent}>
-                {msg.content}
-              </div>
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 0" }} className="chat-scrollbar">
+        {messages.map((msg, idx) => (
+          <div key={idx} style={{ padding: "16px 20px", display: "flex", gap: 16 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: msg.role === "ai" ? "#18181b" : "transparent", fontSize: 16 }}>
+              {msg.role === "ai" ? "✨" : "👤"}
+            </div>
+            <div style={{ flex: 1, lineHeight: 1.6, fontSize: 15, whiteSpace: "pre-wrap", paddingTop: 2 }}>
+              {msg.content}
             </div>
           </div>
         ))}
-        
         {loading && (
-          <div style={{ background: "#1a1a1a", borderBottom: "1px solid #2a2a2a", borderTop: "1px solid #2a2a2a" }}>
-            <div style={S.messageContainer}>
-              <AiAvatar />
-              <div style={{...S.messageContent, opacity: 0.5 }}>
-                <span className="pulse-text">Analyzing database...</span>
-              </div>
-            </div>
+          <div style={{ padding: "16px 20px", display: "flex", gap: 16 }}>
+            <div style={{ width: 28, height: 28, background: "#18181b", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>✨</div>
+            <div className="thinking-pulse" style={{ fontSize: 15, color: "#a1a1aa" }}>Thinking...</div>
           </div>
         )}
         <div ref={chatEndRef} />
       </div>
 
-      {/* Modern Floating Input */}
-      <div style={S.inputWrapper}>
-        <form onSubmit={askGemini} style={S.inputContainer}>
-          <input 
-            type="text" 
-            placeholder="Message the Factory AI..." 
+      {/* Input Area */}
+      <div style={{ padding: 16, background: "#0a0a0a", borderTop: "1px solid #1f1f1f" }}>
+        <form onSubmit={askGemini} style={{ display: "flex", alignItems: "flex-end", background: "#18181b", borderRadius: 12, padding: "8px 12px", border: "1px solid #27272a" }}>
+          <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            style={S.input}
-            disabled={loading}
-            autoComplete="off"
+            placeholder="Analyze production data..."
+            style={{ flex: 1, background: "transparent", border: "none", color: "white", padding: "8px 0", resize: "none", outline: "none", fontSize: 15, maxHeight: 100, minHeight: 20 }}
+            onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askGemini(e); } }}
           />
-          <button type="submit" disabled={loading || !prompt.trim()} style={S.sendBtn}>
-            <SendIcon />
+          <button type="submit" disabled={loading || !prompt.trim()} style={{ background: prompt.trim() ? "#e4e4e7" : "#27272a", color: "#000", border: "none", borderRadius: 6, padding: "6px 12px", marginLeft: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            Send
           </button>
         </form>
-        <p style={{ textAlign: "center", color: "#71717a", fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-          AI can make mistakes. Verify critical financial data against the main dashboard.
-        </p>
+        <div style={{ textAlign: "center", fontSize: 10, color: "#52525b", marginTop: 8 }}>
+          AI models can make errors. Verify sensitive data.
+        </div>
       </div>
     </div>
   );

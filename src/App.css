@@ -239,3 +239,21 @@
 .erp-value.highlight-blue {
   color: #3b82f6; /* Brighter blue, replaces your rgb(41, 128, 185) */
 }
+/* Hide scrollbar for the AI Chat but keep functionality */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth pulsing animation for loading states */
+@keyframes pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+.pulse-text {
+  animation: pulse 1.5s infinite ease-in-out;
+}

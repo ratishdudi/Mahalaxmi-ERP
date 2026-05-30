@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabaseClient";
+import { supabase } from "../supabaseClient";
 
 const STONE_VARIETIES = [
   "Markino Black", "Rajasthan Black", "Pebble Black", "Coin Black",

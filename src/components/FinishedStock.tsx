@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabaseClient";
+import { supabase } from "../supabaseClient";
 
 const FINISHES = ["Polished", "Lapatro", "Leather"];
 const THICKNESSES = ["16mm", "18mm", "30mm"];
@@ -24,6 +24,7 @@ type FinishedEntry = {
   thickness: string;
   notes: string;
   created_at: string;
+  blocks?: any; // Allows flexible access to the joined relationship payload safely
 };
 
 export default function FinishedStock() {
@@ -51,11 +52,12 @@ export default function FinishedStock() {
   }
 
   async function fetchEntries() {
+    // Actively fetching total_sqft from the parent blocks table join
     const { data } = await supabase
       .from("finished_stock")
-      .select("*")
+      .select("*, blocks(total_sqft)")
       .order("created_at", { ascending: false });
-    if (data) setEntries(data);
+    if (data) setEntries(data as FinishedEntry[]);
   }
 
   async function handleSubmit() {
@@ -76,7 +78,7 @@ export default function FinishedStock() {
       finish,
       thickness,
       notes,
-      sqft_sold: 0, // Will be filled at sale time
+      sqft_sold: 0,
       is_own_block: block?.is_own_block,
     });
 
@@ -229,36 +231,51 @@ export default function FinishedStock() {
             No finished stock yet.
           </div>
         ) : (
-          entries.map((entry) => (
-            <div key={entry.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderLeft: "3px solid #27ae60", borderRadius: 12, padding: 16, marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: "#c0392b" }}>{entry.block_no}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{entry.stone_type}</div>
+          entries.map((entry) => {
+            // Safety parser: Extract total_sqft correctly whether Supabase maps it as an object or single-item array
+            const relatedBlock = Array.isArray(entry.blocks) ? entry.blocks[0] : entry.blocks;
+            const liveSqft = relatedBlock?.total_sqft;
+
+            return (
+              <div key={entry.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderLeft: "3px solid #27ae60", borderRadius: 12, padding: 16, marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: "#c0392b" }}>{entry.block_no}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{entry.stone_type}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 10, background: "#27ae6022", color: "#27ae60", border: "1px solid #27ae6044", borderRadius: 6, padding: "3px 8px", fontWeight: 700 }}>
+                      ✅ Ready to Sell
+                    </div>
+                    
+                    {/* Live Dynamic Square Footage Badge */}
+                    <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
+                      Total Yield:{" "}
+                      <span style={{ 
+                        color: liveSqft && liveSqft > 0 ? "#22c55e" : "#d4a843", 
+                        fontWeight: 600 
+                      }}>
+                        {liveSqft && liveSqft > 0 ? `${liveSqft.toLocaleString()} Sqft` : "Measured at sale"}
+                      </span>
+                    </div>
+
+                  </div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 10, background: "#27ae6022", color: "#27ae60", border: "1px solid #27ae6044", borderRadius: 6, padding: "3px 8px", fontWeight: 700 }}>
-                    ✅ Ready to Sell
-                  </div>
-                  <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
-                    Sqft: <span style={{ color: "#d4a843" }}>Measured at sale</span>
-                  </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {[
+                    { label: "Finish", value: entry.finish },
+                    { label: "Thickness", value: entry.thickness },
+                    { label: "Notes", value: entry.notes || "—" },
+                  ].map((col) => (
+                    <div key={col.label} style={{ background: "#0a0a0a", borderRadius: 8, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{col.value}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {[
-                  { label: "Finish", value: entry.finish },
-                  { label: "Thickness", value: entry.thickness },
-                  { label: "Notes", value: entry.notes || "—" },
-                ].map((col) => (
-                  <div key={col.label} style={{ background: "#0a0a0a", borderRadius: 8, padding: "8px 10px" }}>
-                    <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{col.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

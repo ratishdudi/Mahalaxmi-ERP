@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabaseClient";
-import { STATUS } from "./constants";
+import { supabase } from "../supabaseClient";
+import { STATUS } from "../constants";
 
 const MACHINES = [
   { id: "14-blade", label: "14 Blade Cutter", icon: "⚙️", color: "#f59e0b", type: "gangsaw" },

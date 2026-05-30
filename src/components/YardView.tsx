@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabaseClient";
-import { STATUS } from "./constants";
+import { supabase } from "../supabaseClient";
+import { STATUS } from "../constants";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   [STATUS.YARD]: { label: "Waiting in Yard", color: "#9ca3af", icon: "⏳" },
@@ -8,6 +8,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string
   [STATUS.UNPOLISHED]: { label: "Cut — Awaiting Polish", color: "#3b82f6", icon: "🔵" },
   [STATUS.POLISHING]: { label: "On Liner — Polishing", color: "#a855f7", icon: "✨" },
   [STATUS.FINISHED]: { label: "Finished — Ready to Sell", color: "#22c55e", icon: "✅" },
+  [STATUS.READY_TO_SELL]: { label: "Ready to Sell", color: "#10b981", icon: "🏪" },
   [STATUS.SOLD]: { label: "Sold & Dispatched", color: "#e5e7eb", icon: "💰" },
 };
 
@@ -77,13 +78,14 @@ export default function YardView() {
   const statusOptions = ["all", STATUS.YARD, STATUS.CUTTING, STATUS.UNPOLISHED, STATUS.POLISHING, STATUS.FINISHED, STATUS.SOLD];
   const filtered = filter === "all" ? blocks : blocks.filter((b) => b.status === filter);
 
-  const counts = {
-    [STATUS.YARD]: blocks.filter((b) => b.status === STATUS.YARD).length,
-    [STATUS.CUTTING]: blocks.filter((b) => b.status === STATUS.CUTTING).length,
-    [STATUS.UNPOLISHED]: blocks.filter((b) => b.status === STATUS.UNPOLISHED).length,
-    [STATUS.POLISHING]: blocks.filter((b) => b.status === STATUS.POLISHING).length,
-    [STATUS.FINISHED]: blocks.filter((b) => b.status === STATUS.FINISHED).length,
-  };
+ const counts = {
+  [STATUS.YARD]: blocks.filter((b) => b.status === STATUS.YARD).length,
+  [STATUS.CUTTING]: blocks.filter((b) => b.status === STATUS.CUTTING).length,
+  [STATUS.UNPOLISHED]: blocks.filter((b) => b.status === STATUS.UNPOLISHED).length,
+  [STATUS.POLISHING]: blocks.filter((b) => b.status === STATUS.POLISHING).length,
+  [STATUS.FINISHED]: blocks.filter((b) => b.status === STATUS.FINISHED).length,
+  [STATUS.READY_TO_SELL]: blocks.filter((b) => b.status === STATUS.READY_TO_SELL).length, // 👈 ADD THIS LINE
+};
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 16, animation: "fancyFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}>

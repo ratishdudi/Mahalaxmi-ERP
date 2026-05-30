@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { STATUS } from "../constants";
+import { estimateMachineCost, getCostProfile, money } from "../costing";
 
 const MACHINES = [
   { id: "14-blade", label: "14 Blade Cutter", icon: "⚙️", color: "#f59e0b", type: "gangsaw" },
@@ -35,12 +36,23 @@ type Session = {
   started_at: string;
   stopped_at: string | null;
   duration_mins: number | null;
+  cost_rupees?: number | null;
+  blocks?: { quarry_name?: string | null } | { quarry_name?: string | null }[] | null;
+};
+
+type MachineRateProfile = {
+  machine_id: string;
+  hourly_rate: number;
+  learned_hourly_rate?: number | null;
+  observed_hours_90d?: number | null;
+  confidence?: number | null;
 };
 
 export default function MachineSession() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
   const [completedSessions, setCompletedSessions] = useState<Session[]>([]);
+  const [machineRates, setMachineRates] = useState<MachineRateProfile[]>([]);
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState("");
   const [selectedBlock, setSelectedBlock] = useState("");
@@ -53,6 +65,7 @@ export default function MachineSession() {
   useEffect(() => {
     fetchBlocks();
     fetchSessions();
+    fetchMachineRates();
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
   }, []);
@@ -61,7 +74,7 @@ export default function MachineSession() {
     const { data } = await supabase
       .from("blocks")
       .select("id, block_no, stone_type, quarry_name, is_own_block, status")
-      .in("status", [STATUS.YARD, STATUS.UNPOLISHED])
+      .in("status", [STATUS.YARD, STATUS.CUTTING, STATUS.UNPOLISHED, STATUS.POLISHING])
       .order("created_at", { ascending: false });
     if (data) setBlocks(data);
   }
@@ -69,12 +82,19 @@ export default function MachineSession() {
   async function fetchSessions() {
     const { data } = await supabase
       .from("machine_sessions")
-      .select("*")
+      .select("*, blocks(quarry_name)")
       .order("started_at", { ascending: false });
     if (data) {
       setActiveSessions(data.filter((s: Session) => !s.stopped_at));
       setCompletedSessions(data.filter((s: Session) => !!s.stopped_at).slice(0, 15));
     }
+  }
+
+  async function fetchMachineRates() {
+    const { data } = await supabase
+      .from("machine_rate_profiles")
+      .select("machine_id, hourly_rate, learned_hourly_rate, observed_hours_90d, confidence");
+    if (data) setMachineRates(data as MachineRateProfile[]);
   }
 
   function getLiveDuration(startedAt: string) {
@@ -205,16 +225,26 @@ export default function MachineSession() {
     const durationMins = Math.round(
       (new Date(stoppedAt).getTime() - new Date(session.started_at).getTime()) / 60000
     );
+    const relatedBlock = blocks.find((block) => block.id === session.block_id);
+    const sessionQuarry = relatedBlock?.quarry_name || (Array.isArray(session.blocks) ? session.blocks[0]?.quarry_name : session.blocks?.quarry_name) || "";
+    const estimatedCost = estimateMachineCost(session.machine_id, durationMins, session.stone_type, sessionQuarry);
 
     const { error: sessionError } = await supabase
       .from("machine_sessions")
-      .update({ stopped_at: stoppedAt, duration_mins: durationMins })
+      .update({ stopped_at: stoppedAt, duration_mins: durationMins, cost_rupees: estimatedCost })
       .eq("id", session.id);
 
     if (sessionError) {
-      setMessage("❌ Session close failed: " + sessionError.message);
-      setStopLoading(null);
-      return;
+      const retry = await supabase
+        .from("machine_sessions")
+        .update({ stopped_at: stoppedAt, duration_mins: durationMins })
+        .eq("id", session.id);
+
+      if (retry.error) {
+        setMessage("❌ Session close failed: " + retry.error.message);
+        setStopLoading(null);
+        return;
+      }
     }
 
     setMessage(`✅ Block moved to: ${nextBlockStatus === STATUS.UNPOLISHED ? "Cut — Awaiting Polish" : "Finished"}`);
@@ -224,6 +254,9 @@ export default function MachineSession() {
   }
 
   const validBlocks = getValidBlocks();
+  const selectedBlockInfo = blocks.find((block) => block.id === selectedBlock);
+  const selectedCostProfile = selectedBlockInfo ? getCostProfile(selectedBlockInfo.stone_type, selectedBlockInfo.quarry_name || "") : null;
+  const rateFor = (machineId: string) => machineRates.find((rate) => rate.machine_id === machineId);
 
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 16 },
@@ -248,6 +281,11 @@ export default function MachineSession() {
             <div key={machine.id} style={{ background: "var(--code-bg)", border: `1px solid ${isActive ? machine.color : "var(--border)"}`, borderRadius: 14, padding: 14, transition: "all 0.3s" }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>{machine.icon}</div>
               <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, lineHeight: 1.3, color: "var(--text-h)" }}>{machine.label}</div>
+              <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 8 }}>
+                {rateFor(machine.id)
+                  ? `${money(Number(rateFor(machine.id)?.hourly_rate || 0))}/hr · ${Math.round(Number(rateFor(machine.id)?.confidence || 0) * 100)}% confidence`
+                  : "Using seed rate"}
+              </div>
               {isActive && activeSession ? (
                 <>
                   <div style={{ fontSize: 9, color: machine.color, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>● ACTIVE</div>
@@ -329,6 +367,27 @@ export default function MachineSession() {
           )}
         </div>
 
+        {selectedBlockInfo && selectedCostProfile && (
+          <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 10, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+              Quarry Cost Intelligence
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              {[
+                { label: "Quarry", value: selectedBlockInfo.quarry_name || "Unknown" },
+                { label: "Hardness", value: `${selectedCostProfile.hardnessMultiplier}x` },
+                { label: "Yield Est.", value: `${selectedCostProfile.expectedYieldPct}%` },
+                { label: "1hr Est.", value: selectedMachine ? money(Number(rateFor(selectedMachine)?.hourly_rate || 0) > 0 ? Number(rateFor(selectedMachine)?.hourly_rate || 0) * selectedCostProfile.hardnessMultiplier : estimateMachineCost(selectedMachine, 60, selectedBlockInfo.stone_type, selectedBlockInfo.quarry_name || "")) : "-" },
+              ].map((item) => (
+                <div key={item.label} style={{ background: "var(--code-bg)", borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontSize: 9, color: "var(--text)", textTransform: "uppercase" }}>{item.label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "var(--text-h)" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 16 }}>
           <label style={S.label}>Operator *</label>
           <select value={selectedOperator} onChange={(e) => setSelectedOperator(e.target.value)} style={S.select}>
@@ -358,14 +417,18 @@ export default function MachineSession() {
 
       {showCompleted && completedSessions.map((s) => {
         const machine = MACHINES.find((m) => m.id === s.machine_id);
+        const relatedBlock = blocks.find((block) => block.id === s.block_id);
+        const sessionQuarry = relatedBlock?.quarry_name || (Array.isArray(s.blocks) ? s.blocks[0]?.quarry_name : s.blocks?.quarry_name) || "";
+        const displayedCost = Number(s.cost_rupees || 0) || estimateMachineCost(s.machine_id, Number(s.duration_mins || 0), s.stone_type, sessionQuarry);
         return (
-          <div key={s.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 8 }}>
+          <div key={s.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 8 }}>
             {[
               { label: "Machine", value: `${machine?.icon} ${machine?.label}`, color: machine?.color },
               { label: "Block", value: s.block_no, color: "#ef4444" },
               { label: "Stone", value: s.stone_type },
               { label: "Operator", value: s.operator_name },
               { label: "Duration", value: `${s.duration_mins} mins`, color: "#22c55e" },
+              { label: "Est. Cost", value: money(displayedCost), color: "#f59e0b" },
             ].map((col) => (
               <div key={col.label}>
                 <div style={{ fontSize: 9, color: "var(--text)", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>

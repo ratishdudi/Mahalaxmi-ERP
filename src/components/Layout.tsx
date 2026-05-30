@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
-import AiAssistant from "./AiAssistant"; // Ensure your AI file is exactly named AiAssistant.tsx
-import { UI } from "../styles"; // Import your new style system
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "../supabaseClient";
+import "./Layout.css";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -8,299 +8,206 @@ interface LayoutProps {
   setActiveTab: (tab: string) => void;
 }
 
-export default function Layout({
-  children,
-  activeTab,
-  setActiveTab,
-}: LayoutProps) {
-  const [isAiOpen, setIsAiOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+const NAV = [
+  {
+    group: "DASHBOARD",
+    items: [{ id: "Dashboard", label: "Overview", short: "Home", icon: "H" }],
+  },
+  {
+    group: "OPERATIONS",
+    items: [
+      { id: "Inventory", label: "Block Inward", short: "Inward", icon: "I" },
+      { id: "Yard", label: "Yard Stock", short: "Yard", icon: "Y" },
+      { id: "Machines", label: "Production", short: "Machines", icon: "M" },
+      { id: "Finished", label: "Finished Stock", short: "Stock", icon: "F" },
+    ],
+  },
+  {
+    group: "SALES",
+    items: [
+      { id: "Sales", label: "Sales Entry", short: "Sales", icon: "S" },
+      { id: "Parties", label: "Parties", short: "Parties", icon: "P" },
+    ],
+  },
+  {
+    group: "ACCOUNTS",
+    items: [
+      { id: "Expenses", label: "Ledger", short: "Ledger", icon: "L" },
+      { id: "Break-Even", label: "Profitability", short: "Profit", icon: "B" },
+    ],
+  },
+  {
+    group: "TOOLS",
+    items: [{ id: "AI Assistant", label: "AI Assistant", short: "AI", icon: "AI" }],
+  },
+];
 
-  // Injecting responsive CSS
-  useEffect(() => {
-    if (!document.getElementById("layout-responsive-styles")) {
-      const style = document.createElement("style");
-      style.id = "layout-responsive-styles";
-      style.innerHTML = `
-        .app-sidebar {
-          width: 260px;
-          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .ai-drawer {
-          width: 400px;
-          right: -450px;
-        }
-        .ai-drawer.open {
-          right: 0;
-        }
-        .mobile-toggle { display: none; }
-        
-        @media (max-width: 768px) {
-          .app-sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 50;
-            transform: translateX(-100%);
-          }
-          .app-sidebar.open {
-            transform: translateX(0);
-          }
-          .mobile-toggle { display: block; }
-          .header-status { display: none !important; }
-          
-          .ai-drawer {
-            width: 100vw;
-            right: -100vw;
-          }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-  }, []);
+const MOBILE_TABS = ["Dashboard", "Inventory", "Machines", "Sales", "Expenses"];
 
-  const sections = [
-    {
-      title: "DASHBOARD",
-      items: ["Overview"],
-    },
-    {
-      title: "OPERATIONS",
-      items: ["Block Inward", "Yard Stock", "Production", "Finished Stock"],
-    },
-    {
-      title: "SALES",
-      items: ["Sales", "Parties"],
-    },
-    {
-      title: "ACCOUNTS",
-      items: ["Expenses", "Profitability"],
-    },
-  ];
+type Msg = { role: "user" | "ai"; content: string };
 
-  const handleNavClick = (item: string) => {
-    setActiveTab(item);
-    setIsMobileMenuOpen(false);
-  };
+export default function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
+  const [aiOpen, setAiOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const items = useMemo(() => NAV.flatMap((section) => section.items), []);
+  const activeItem = items.find((item) => item.id === activeTab);
+  const mobileItems = MOBILE_TABS.map((id) => items.find((item) => item.id === id)).filter(Boolean) as typeof items;
+
+  function chooseTab(tab: string) {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+    if (tab === "AI Assistant") setAiOpen(true);
+  }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background: UI.colors.bg,
-        color: UI.colors.textMain,
-        fontFamily: UI.font.family,
-      }}
-    >
-      {/* Mobile Sidebar Dark Overlay */}
-      {isMobileMenuOpen && (
-        <div
-          onClick={() => setIsMobileMenuOpen(false)}
-          style={{
-            position: "fixed",
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            zIndex: 40,
-          }}
-        />
-      )}
+    <div className="erp-shell">
+      {sidebarOpen && <button className="erp-overlay" aria-label="Close menu" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Sidebar Navigation */}
-      <nav
-        className={`app-sidebar ${isMobileMenuOpen ? "open" : ""}`}
-        style={{
-          background: "#ffffff",
-          borderRight: "1px solid #e5e7eb",
-          display: "flex",
-          flexDirection: "column",
-          padding: "20px 20px 0 20px",
-          boxSizing: "border-box",
-        }}
-      >
-        <div
-          style={{
-            marginBottom: 32,
-            paddingBottom: 20,
-            borderBottom: "1px solid #e5e7eb",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center"
-          }}
-        >
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>
-            🏢 Mahalaxmi ERP
-          </div>
-          <button 
-            className="mobile-toggle"
-            onClick={() => setIsMobileMenuOpen(false)}
-            style={{ background: "none", border: "none", fontSize: 20, color: "#6b7280", cursor: "pointer" }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto" }} className="hide-scrollbar">
-          {sections.map((section) => (
-            <div key={section.title} style={{ marginBottom: 24 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  color: "#9ca3af",
-                  marginBottom: 8,
-                  marginLeft: 4,
-                }}
-              >
-                {section.title}
-              </div>
-
+      <aside className={`erp-sidebar ${sidebarOpen ? "is-open" : ""}`}>
+        <Brand />
+        <nav className="erp-nav" aria-label="Primary navigation">
+          {NAV.map((section) => (
+            <section key={section.group} className="erp-nav-section">
+              <div className="erp-nav-heading">{section.group}</div>
               {section.items.map((item) => {
-                const active = activeTab === item;
+                const active = activeTab === item.id || (item.id === "AI Assistant" && aiOpen);
                 return (
-                  <div
-                    key={item}
-                    onClick={() => handleNavClick(item)}
-                    style={{
-                      padding: "10px 14px",
-                      marginBottom: 4,
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      background: active ? "#eff6ff" : "transparent",
-                      color: active ? "#2563eb" : "#4b5563",
-                      fontWeight: active ? 600 : 500,
-                      border: active ? "1px solid #bfdbfe" : "1px solid transparent",
-                      display: "flex",
-                      alignItems: "center"
-                    }}
-                  >
-                    {item}
-                  </div>
+                  <button key={item.id} className={`erp-nav-item ${active ? "is-active" : ""}`} onClick={() => chooseTab(item.id)}>
+                    <span className="erp-nav-icon">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
                 );
               })}
-            </div>
+            </section>
           ))}
+        </nav>
+        <div className="erp-plant">
+          <span className="erp-plant-dot" />
+          Kishangarh Unit
         </div>
+      </aside>
 
-        <div style={{ padding: "20px 0", borderTop: "1px solid #e5e7eb", marginTop: "auto" }}>
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              setIsAiOpen(true);
-            }}
-            style={{
-              width: "100%",
-              padding: "12px",
-              background: "#f3f4f6",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              color: "#374151",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: 8,
-              transition: "all 0.2s"
-            }}
-          >
-            🤖 Ask AI Assistant
+      <section className="erp-workspace">
+        <header className="erp-topbar">
+          <button className="erp-menu-button" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+            <span />
+            <span />
+            <span />
           </button>
-        </div>
-      </nav>
-
-      {/* Main Content Area */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        <header
-          style={{
-            height: 70,
-            background: "#ffffff",
-            borderBottom: "1px solid #e5e7eb",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 20px",
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button
-              className="mobile-toggle"
-              onClick={() => setIsMobileMenuOpen(true)}
-              style={{ background: "none", border: "none", fontSize: 24, color: "#111827", cursor: "pointer", padding: 0 }}
-            >
-              ☰
-            </button>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>
-              {activeTab}
-            </div>
+          <div className="erp-title-block">
+            <div className="erp-current">{activeItem?.label || activeTab}</div>
+            <div className="erp-subtitle">Mahalaxmi Granite ERP</div>
           </div>
-          
-          <div className="header-status" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#059669", background: "#d1fae5", padding: "6px 12px", borderRadius: 20 }}>
-              🟢 Live Server
-            </div>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1e3a8a", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 }}>
-              MM
-            </div>
+          <div className="erp-top-actions">
+            <div className="erp-date">{new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
+            <button className={`erp-ai-button ${aiOpen ? "is-active" : ""}`} onClick={() => setAiOpen((open) => !open)}>
+              AI
+            </button>
           </div>
         </header>
 
-        <main style={{ flex: 1, overflowY: "auto" }}>
-          {children}
-        </main>
-      </div>
+        <div className="erp-content-row">
+          <main className="erp-main">{children}</main>
+          {aiOpen && (
+            <aside className="erp-ai-drawer">
+              <AiDrawer />
+            </aside>
+          )}
+        </div>
 
-      {/* --- AI DRAWER OVERLAY --- */}
-      {isAiOpen && (
-        <div
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-            background: "rgba(0, 0, 0, 0.4)", backdropFilter: "blur(2px)", zIndex: 60,
-          }}
-          onClick={() => setIsAiOpen(false)}
-        />
-      )}
+        <footer className="erp-statusbar">
+          <span><strong>Live</strong> Supabase workspace</span>
+          <span>{activeItem?.label || activeTab}</span>
+          <span>Kishangarh operations</span>
+        </footer>
+      </section>
 
-      {/* --- AI DRAWER PANEL --- */}
-      <div
-        className={`ai-drawer ${isAiOpen ? "open" : ""}`}
-        style={{
-          position: "fixed", top: 0, 
-          height: "100vh", background: "#ffffff",
-          boxShadow: "-8px 0 30px rgba(0, 0, 0, 0.1)",
-          transition: "right 0.3s cubic-bezier(0.16, 1, 0.3, 1)", zIndex: 70,
-          display: "flex", flexDirection: "column"
-        }}
-      >
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc" }}>
-          <div>
-            <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "#111827" }}>🤖 Mahalaxmi AI</h2>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Factory Intelligence</div>
-          </div>
-          <button 
-            onClick={() => setIsAiOpen(false)} 
-            style={{ background: "#e5e7eb", border: "none", width: 32, height: 32, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#4b5563", fontWeight: "bold", fontSize: 14 }}
-          >
-            ✕
+      <nav className="erp-mobile-nav" aria-label="Mobile navigation">
+        {mobileItems.map((item) => (
+          <button key={item.id} className={`erp-mobile-tab ${activeTab === item.id ? "is-active" : ""}`} onClick={() => chooseTab(item.id)}>
+            <span className="erp-mobile-icon">{item.icon}</span>
+            <span>{item.short}</span>
           </button>
-        </div>
-        
-        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-          <AiAssistant />
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="erp-brand">
+      <div className="erp-logo" aria-hidden="true">
+        <span>M</span>
+        <span>L</span>
+        <span>G</span>
+      </div>
+      <div>
+        <div className="erp-brand-name">Mahalaxmi ERP</div>
+        <div className="erp-brand-sub">Granite Operations</div>
+      </div>
+    </div>
+  );
+}
+
+function AiDrawer() {
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<Msg[]>([
+    { role: "ai", content: "Ask about stock, sales, parties, machine rates, or pending payments." },
+  ]);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+    const userMsg: Msg = { role: "user", content: prompt.trim() };
+    setMessages((prev) => [...prev, userMsg]);
+    setPrompt("");
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("factory-ai", {
+        body: { prompt: userMsg.content },
+      });
+      if (error) throw error;
+      setMessages((prev) => [...prev, { role: "ai", content: data.message }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "ai", content: "AI is not connected yet. Supabase Edge Function setup is required." }]);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="erp-ai-panel">
+      <div className="erp-ai-head">
+        <div>
+          <strong>Factory AI</strong>
+          <span>Operational assistant</span>
         </div>
       </div>
+      <div className="erp-ai-prompts">
+        {["Who owes money?", "Machine cost trend", "Slow stock"].map((q) => (
+          <button key={q} onClick={() => setPrompt(q)}>{q}</button>
+        ))}
+      </div>
+      <div className="erp-ai-messages">
+        {messages.map((msg, i) => (
+          <div key={i} className={`erp-message ${msg.role === "user" ? "is-user" : ""}`}>
+            {msg.content}
+          </div>
+        ))}
+        {loading && <div className="erp-ai-loading">Thinking...</div>}
+        <div ref={bottomRef} />
+      </div>
+      <form className="erp-ai-form" onSubmit={send}>
+        <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Ask factory AI..." />
+        <button type="submit" disabled={loading || !prompt.trim()}>Send</button>
+      </form>
     </div>
   );
 }

@@ -1,333 +1,413 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { MACHINE_PROFILES, money } from "../costing";
+import SmartTextInput from "./SmartTextInput";
+import { canonicalName, uniqueCanonicalNames } from "../names";
 
-type MonthlyCost = {
+type LedgerType = "expense" | "income" | "asset" | "adjustment";
+
+type FactoryLedgerRow = {
+  id: string;
+  entry_date: string;
+  entry_type: LedgerType;
+  category: string;
+  description: string | null;
+  amount: number;
+  block_id: string | null;
+  party_name: string | null;
+  quarry_name: string | null;
+  stone_type: string | null;
+  processed_sqft: number | null;
+  machine_id?: string | null;
+  created_at: string;
+};
+
+type BlockRow = {
+  id: string;
+  block_no: string;
+  stone_type: string;
+  quarry_name: string | null;
+  landed_cost: number;
+  created_at: string;
+};
+
+type SaleRow = {
+  id: string;
+  buyer_name: string;
+  total_amount: number;
+  amount_paid: number;
+  sold_at: string;
+  blocks?: { block_no: string; stone_type: string; quarry_name?: string | null } | { block_no: string; stone_type: string; quarry_name?: string | null }[] | null;
+};
+
+type MonthlyCostRow = {
   id: string;
   month: string;
-  electricity_bill: number;
-  total_wages: number;
-  segments_cost: number;
-  polishing_bricks_cost: number;
-  epoxy_cost: number;
-  other_cost: number;
-  other_description: string;
   total_overhead: number;
   sqft_processed: number;
   cost_per_sqft: number;
   created_at: string;
 };
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
+type LedgerViewRow = {
+  id: string;
+  date: string;
+  source: "ledger" | "block" | "sale" | "monthly";
+  type: LedgerType;
+  category: string;
+  description: string;
+  amount: number;
+  party?: string | null;
+  block?: string | null;
+  stone?: string | null;
+  quarry?: string | null;
+  processedSqft?: number | null;
+  machineId?: string | null;
+};
+
+const CATEGORIES = [
+  "block_purchase",
+  "electricity",
+  "labour",
+  "diamond_segments",
+  "polishing_bricks",
+  "epoxy_resin",
+  "machine_repair",
+  "transport",
+  "loading_dispatch",
+  "job_work",
+  "sale_receipt",
+  "owner_withdrawal",
+  "other",
 ];
 
-const YEARS = ["2024", "2025", "2026", "2027"];
+function monthKey(date: string) {
+  return new Date(date).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
 
 export default function MonthlyCosts() {
-  const [costs, setCosts] = useState<MonthlyCost[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [ledger, setLedger] = useState<FactoryLedgerRow[]>([]);
+  const [blocks, setBlocks] = useState<BlockRow[]>([]);
+  const [sales, setSales] = useState<SaleRow[]>([]);
+  const [legacyMonthly, setLegacyMonthly] = useState<MonthlyCostRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [sqftThisMonth, setSqftThisMonth] = useState(0);
+  const [ledgerMissing, setLedgerMissing] = useState(false);
 
-  // Form state
-  const currentMonth = MONTHS[new Date().getMonth()];
-  const currentYear = String(new Date().getFullYear());
-  const [month, setMonth] = useState(currentMonth);
-  const [year, setYear] = useState(currentYear);
-  const [electricity, setElectricity] = useState("");
-  const [wages, setWages] = useState("");
-  const [segments, setSegments] = useState("");
-  const [polishingBricks, setPolishingBricks] = useState("");
-  const [epoxy, setEpoxy] = useState("");
-  const [otherCost, setOtherCost] = useState("");
-  const [otherDesc, setOtherDesc] = useState("");
+  const [entryType, setEntryType] = useState<LedgerType>("expense");
+  const [category, setCategory] = useState("electricity");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [partyName, setPartyName] = useState("");
+  const [blockId, setBlockId] = useState("");
+  const [machineId, setMachineId] = useState("");
+  const [processedSqft, setProcessedSqft] = useState("");
 
   useEffect(() => {
-    fetchCosts();
+    fetchAll();
   }, []);
 
-  // Fetch sqft processed this month from machine sessions
-  useEffect(() => {
-    fetchSqftThisMonth(month, year);
-  }, [month, year]);
+  async function fetchAll() {
+    setLoading(true);
+    const [ledgerRes, blocksRes, salesRes, monthlyRes] = await Promise.all([
+      supabase.from("factory_ledger").select("*").order("entry_date", { ascending: false }),
+      supabase.from("blocks").select("id, block_no, stone_type, quarry_name, landed_cost, created_at").order("created_at", { ascending: false }),
+      supabase.from("sales").select("id, buyer_name, total_amount, amount_paid, sold_at, blocks(block_no, stone_type, quarry_name)").order("sold_at", { ascending: false }),
+      supabase.from("monthly_costs").select("id, month, total_overhead, sqft_processed, cost_per_sqft, created_at").order("created_at", { ascending: false }),
+    ]);
 
-  async function fetchCosts() {
-    const { data } = await supabase
-      .from("monthly_costs")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setCosts(data);
-  }
-
-  async function fetchSqftThisMonth(m: string, y: string) {
-    // Get all sales in this month to calculate sqft processed
-    const monthIndex = MONTHS.indexOf(m) + 1;
-    const paddedMonth = String(monthIndex).padStart(2, "0");
-    const startDate = `${y}-${paddedMonth}-01`;
-    const endDate = `${y}-${paddedMonth}-31`;
-
-    const { data } = await supabase
-      .from("sales")
-      .select("sqft_sold")
-      .gte("sold_at", startDate)
-      .lte("sold_at", endDate);
-
-    if (data) {
-      const total = data.reduce((sum, s) => sum + Number(s.sqft_sold), 0);
-      setSqftThisMonth(total);
+    if (ledgerRes.error) {
+      setLedgerMissing(true);
+      setLedger([]);
+    } else {
+      setLedgerMissing(false);
+      setLedger((ledgerRes.data || []) as FactoryLedgerRow[]);
     }
+
+    if (blocksRes.data) setBlocks(blocksRes.data as BlockRow[]);
+    if (salesRes.data) setSales(salesRes.data as unknown as SaleRow[]);
+    if (monthlyRes.data) setLegacyMonthly(monthlyRes.data as MonthlyCostRow[]);
+    setLoading(false);
   }
 
-  // Live calculation
-  const totalOverhead =
-    Number(electricity || 0) +
-    Number(wages || 0) +
-    Number(segments || 0) +
-    Number(polishingBricks || 0) +
-    Number(epoxy || 0) +
-    Number(otherCost || 0);
-
-  const costPerSqft = sqftThisMonth > 0
-    ? Math.round(totalOverhead / sqftThisMonth)
-    : 0;
-
-  async function handleSubmit() {
-    if (!electricity && !wages) {
-      setMessage("❌ Enter at least electricity bill or wages.");
+  async function saveLedgerEntry() {
+    const value = Number(amount || 0);
+    if (!value || value <= 0) {
+      setMessage("Enter a valid amount.");
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     setMessage("");
 
-    const monthKey = `${month} ${year}`;
+    const selectedBlock = blocks.find((block) => block.id === blockId);
+    const partySuggestions = uniqueCanonicalNames([...sales.map((sale) => sale.buyer_name), ...ledger.map((entry) => entry.party_name || "")]);
+    const { error } = await supabase.from("factory_ledger").insert({
+      entry_date: entryDate,
+      entry_type: entryType,
+      category,
+      description,
+      amount: value,
+      block_id: blockId || null,
+      party_name: partyName ? canonicalName(partyName, partySuggestions) : null,
+      quarry_name: selectedBlock?.quarry_name || null,
+      stone_type: selectedBlock?.stone_type || null,
+      machine_id: machineId || null,
+      processed_sqft: processedSqft ? Number(processedSqft) : null,
+    });
 
-    // Check if this month already exists
-    const existing = costs.find((c) => c.month === monthKey);
-    if (existing) {
-      setMessage(`❌ Costs for ${monthKey} already logged. Edit the existing entry instead.`);
-      setLoading(false);
+    setSaving(false);
+    if (error) {
+      setMessage(error.message.includes("factory_ledger")
+        ? "Ledger table is not created yet. Apply the Supabase migration in supabase/migrations first."
+        : error.message);
       return;
     }
 
-    const { error } = await supabase.from("monthly_costs").insert({
-      month: monthKey,
-      electricity_bill: Number(electricity || 0),
-      total_wages: Number(wages || 0),
-      segments_cost: Number(segments || 0),
-      polishing_bricks_cost: Number(polishingBricks || 0),
-      epoxy_cost: Number(epoxy || 0),
-      other_cost: Number(otherCost || 0),
-      other_description: otherDesc,
-      total_overhead: totalOverhead,
-      sqft_processed: sqftThisMonth,
-      cost_per_sqft: costPerSqft,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setMessage("❌ " + error.message);
-    } else {
-      setMessage(`✅ Costs for ${monthKey} logged! Overhead: ₹${totalOverhead.toLocaleString()} | Cost/Sqft: ₹${costPerSqft}`);
-      setElectricity("");
-      setWages("");
-      setSegments("");
-      setPolishingBricks("");
-      setEpoxy("");
-      setOtherCost("");
-      setOtherDesc("");
-      fetchCosts();
-    }
+    setMessage("Ledger entry saved.");
+    setAmount("");
+    setDescription("");
+    setPartyName("");
+    setBlockId("");
+    setMachineId("");
+    setProcessedSqft("");
+    await fetchAll();
   }
 
+  const rows = useMemo<LedgerViewRow[]>(() => {
+    const manualRows: LedgerViewRow[] = ledger.map((entry) => ({
+      id: `ledger-${entry.id}`,
+      date: entry.entry_date,
+      source: "ledger",
+      type: entry.entry_type,
+      category: entry.category,
+      description: entry.description || entry.category.replaceAll("_", " "),
+      amount: Number(entry.amount || 0),
+      party: entry.party_name,
+      stone: entry.stone_type,
+      quarry: entry.quarry_name,
+      processedSqft: entry.processed_sqft,
+      machineId: entry.machine_id,
+    }));
+
+    const blockRows: LedgerViewRow[] = blocks.map((block) => ({
+      id: `block-${block.id}`,
+      date: block.created_at,
+      source: "block",
+      type: "asset",
+      category: "block_purchase",
+      description: `Block purchase ${block.block_no}`,
+      amount: Number(block.landed_cost || 0),
+      block: block.block_no,
+      stone: block.stone_type,
+      quarry: block.quarry_name,
+    }));
+
+    const saleRows: LedgerViewRow[] = sales.map((sale) => {
+      const block = Array.isArray(sale.blocks) ? sale.blocks[0] : sale.blocks;
+      return {
+        id: `sale-${sale.id}`,
+        date: sale.sold_at,
+        source: "sale",
+        type: "income",
+        category: "sale_invoice",
+        description: `Sale to ${sale.buyer_name}`,
+        amount: Number(sale.total_amount || 0),
+        party: sale.buyer_name,
+        block: block?.block_no,
+        stone: block?.stone_type,
+        quarry: block?.quarry_name,
+      };
+    });
+
+    const paymentRows: LedgerViewRow[] = sales
+      .filter((sale) => Number(sale.amount_paid || 0) > 0)
+      .map((sale) => {
+        const block = Array.isArray(sale.blocks) ? sale.blocks[0] : sale.blocks;
+        return {
+          id: `payment-${sale.id}`,
+          date: sale.sold_at,
+          source: "sale",
+          type: "income",
+          category: "payment_received",
+          description: `Payment received from ${sale.buyer_name}`,
+          amount: Number(sale.amount_paid || 0),
+          party: sale.buyer_name,
+          block: block?.block_no,
+          stone: block?.stone_type,
+          quarry: block?.quarry_name,
+        };
+      });
+
+    const monthlyRows: LedgerViewRow[] = legacyMonthly.map((cost) => ({
+      id: `monthly-${cost.id}`,
+      date: cost.created_at,
+      source: "monthly",
+      type: "expense",
+      category: "legacy_monthly_overhead",
+      description: `Legacy overhead: ${cost.month}`,
+      amount: Number(cost.total_overhead || 0),
+      processedSqft: Number(cost.sqft_processed || 0),
+    }));
+
+    return [...manualRows, ...blockRows, ...saleRows, ...paymentRows, ...monthlyRows]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [ledger, blocks, sales, legacyMonthly]);
+
+  const currentMonth = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const monthRows = rows.filter((row) => monthKey(row.date) === currentMonth);
+  const expenses = monthRows.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0);
+  const income = monthRows.filter((row) => row.type === "income").reduce((sum, row) => sum + row.amount, 0);
+  const purchases = monthRows.filter((row) => row.type === "asset").reduce((sum, row) => sum + row.amount, 0);
+  const processed = monthRows.reduce((sum, row) => sum + Number(row.processedSqft || 0), 0);
+  const overheadPerSqft = processed > 0 ? expenses / processed : 0;
+  const partySuggestions = uniqueCanonicalNames([...sales.map((sale) => sale.buyer_name), ...ledger.map((entry) => entry.party_name || "")]);
+
   const S: Record<string, React.CSSProperties> = {
-    page: { maxWidth: 900, margin: "0 auto", padding: 16 },
-    card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 20, marginBottom: 24 },
-    label: { fontSize: 11, color: "var(--text)", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
-    input: { width: "100%", padding: "10px 14px", minHeight: 44, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
-    select: { width: "100%", padding: "10px 14px", minHeight: 44, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
+    page: { maxWidth: 1100, margin: "0 auto", padding: 16 },
+    card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 },
+    label: { fontSize: 10, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 },
+    input: { width: "100%", padding: "10px 12px", minHeight: 42, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 13 },
   };
 
   return (
     <div style={S.page}>
-
-      {/* Header */}
-      <div style={{ paddingTop: 20, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>📊 Monthly Costs</h1>
+      <div style={{ paddingTop: 10, marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>Factory Ledger</h1>
         <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>
-          Log all factory expenses. System calculates real overhead cost per sqft.
+          One place for costs, purchases, payments, overhead and production-linked adjustments.
         </p>
       </div>
 
-      {/* Form */}
-      <div style={S.card}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, color: "var(--text-h)" }}>Log This Month's Expenses</h2>
+      {ledgerMissing && (
+        <div style={{ ...S.card, borderColor: "#f59e0b", background: "#fffbeb", marginBottom: 16, color: "#92400e", fontSize: 13 }}>
+          The new flexible ledger table is not in Supabase yet. Existing block purchases, sales and old monthly costs are still shown below. Apply the migration at <strong>supabase/migrations/20260531020000_factory_ledger.sql</strong> to enable manual ledger entries.
+        </div>
+      )}
 
-        {/* Month + Year */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+        {[
+          { label: "Month Income", value: money(income), color: "#22c55e" },
+          { label: "Month Expenses", value: money(expenses), color: "#ef4444" },
+          { label: "Block Purchases", value: money(purchases), color: "#2563eb" },
+          { label: "Overhead / Sqft", value: overheadPerSqft > 0 ? money(overheadPerSqft) : "Need sqft", color: "#f59e0b" },
+        ].map((item) => (
+          <div key={item.label} style={S.card}>
+            <div style={S.label}>{item.label}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...S.card, marginBottom: 16 }}>
+        <h2 style={{ fontSize: 15, margin: "0 0 14px", color: "var(--text-h)" }}>Add Ledger Entry</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
           <div>
-            <label style={S.label}>Month *</label>
-            <select value={month} onChange={(e) => setMonth(e.target.value)} style={S.select}>
-              {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+            <label style={S.label}>Date</label>
+            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Type</label>
+            <select value={entryType} onChange={(e) => setEntryType(e.target.value as LedgerType)} style={S.input}>
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+              <option value="asset">Asset / Purchase</option>
+              <option value="adjustment">Adjustment</option>
             </select>
           </div>
           <div>
-            <label style={S.label}>Year *</label>
-            <select value={year} onChange={(e) => setYear(e.target.value)} style={S.select}>
-              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+            <label style={S.label}>Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={S.input}>
+              {CATEGORIES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
             </select>
           </div>
-        </div>
-
-        {/* Sqft processed this month — auto pulled */}
-        <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={S.label}>Sqft Sold This Month (Auto)</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: sqftThisMonth > 0 ? "#22c55e" : "#f59e0b" }}>
-              {sqftThisMonth > 0 ? `${sqftThisMonth.toLocaleString()} Sqft` : "No sales logged yet"}
-            </div>
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text)", textAlign: "right" }}>
-            Pulled from<br />Sales records
+            <label style={S.label}>Amount</label>
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={S.input} />
           </div>
         </div>
-
-        {/* Electricity */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={S.label}>⚡ Electricity Bill (₹)</label>
-          <input type="number" value={electricity} onChange={(e) => setElectricity(e.target.value)}
-            placeholder="Total bill amount from electricity receipt" style={S.input} />
-        </div>
-
-        {/* Wages */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={S.label}>👷 Total Wages Paid (₹)</label>
-          <input type="number" value={wages} onChange={(e) => setWages(e.target.value)}
-            placeholder="Sum of all operator payments this month" style={S.input} />
-        </div>
-
-        {/* Consumables */}
-        <div style={{ marginBottom: 4 }}>
-          <label style={S.label}>🔧 Consumables Purchased</label>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 4 }}>Diamond Segments (₹)</div>
-            <input type="number" value={segments} onChange={(e) => setSegments(e.target.value)}
-              placeholder="0" style={S.input} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 4 }}>Polishing Bricks (₹)</div>
-            <input type="number" value={polishingBricks} onChange={(e) => setPolishingBricks(e.target.value)}
-              placeholder="0" style={S.input} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 4 }}>Epoxy / Resin (₹)</div>
-            <input type="number" value={epoxy} onChange={(e) => setEpoxy(e.target.value)}
-              placeholder="0" style={S.input} />
-          </div>
-        </div>
-
-        {/* Other */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-          <div>
-            <label style={S.label}>Other Expense (₹)</label>
-            <input type="number" value={otherCost} onChange={(e) => setOtherCost(e.target.value)}
-              placeholder="0" style={S.input} />
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 10 }}>
           <div>
             <label style={S.label}>Description</label>
-            <input type="text" value={otherDesc} onChange={(e) => setOtherDesc(e.target.value)}
-              placeholder="e.g. Machine repair, transport" style={S.input} />
+            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Segment purchase, transport, repair" style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Party</label>
+            <SmartTextInput value={partyName} onChange={setPartyName} suggestions={partySuggestions} placeholder="Optional" style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Block Link</label>
+            <select value={blockId} onChange={(e) => setBlockId(e.target.value)} style={S.input}>
+              <option value="">No block</option>
+              {blocks.map((block) => (
+                <option key={block.id} value={block.id}>{block.block_no} - {block.stone_type}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={S.label}>Machine Link</label>
+            <select value={machineId} onChange={(e) => setMachineId(e.target.value)} style={S.input}>
+              <option value="">Shared / no machine</option>
+              {MACHINE_PROFILES.map((machine) => (
+                <option key={machine.id} value={machine.id}>{machine.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={S.label}>Processed Sqft</label>
+            <input type="number" value={processedSqft} onChange={(e) => setProcessedSqft(e.target.value)} placeholder="Optional" style={S.input} />
           </div>
         </div>
-
-        {/* Live Calculation Panel */}
-        {totalOverhead > 0 && (
-          <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
-              Live Calculation
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 4 }}>Total Overhead</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#ef4444" }}>
-                  ₹{totalOverhead.toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 4 }}>Sqft Processed</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>
-                  {sqftThisMonth.toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: "var(--text)", marginBottom: 4 }}>Overhead / Sqft</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: costPerSqft > 0 ? "#22c55e" : "#555" }}>
-                  {costPerSqft > 0 ? `₹${costPerSqft}` : "Need sales data"}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <button onClick={handleSubmit} disabled={loading}
-          style={{ width: "100%", padding: "12px 0", minHeight: 44, background: loading ? "var(--border)" : "#22c55e", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
-          {loading ? "Saving..." : `💾 Log ${month} ${year} Costs`}
+        <button onClick={saveLedgerEntry} disabled={saving || ledgerMissing}
+          style={{ marginTop: 12, width: "100%", minHeight: 42, border: "none", borderRadius: 8, background: ledgerMissing ? "#cbd5e1" : "#111827", color: "white", fontWeight: 700, cursor: ledgerMissing ? "not-allowed" : "pointer" }}>
+          {saving ? "Saving..." : "Save Ledger Entry"}
         </button>
-
         {message && (
-          <div style={{ marginTop: 12, padding: "10px 14px", background: message.includes("✅") ? "#22c55e22" : "#ef444422", borderRadius: 8, fontSize: 13, color: message.includes("✅") ? "#22c55e" : "#ef4444" }}>
-            {message}
-          </div>
+          <div style={{ marginTop: 10, fontSize: 13, color: message.includes("saved") ? "#16a34a" : "#ef4444" }}>{message}</div>
         )}
       </div>
 
-      {/* Historical Costs */}
-      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: "var(--text-h)" }}>
-        Cost History ({costs.length} months)
-      </h2>
-      {costs.length === 0 ? (
-        <div style={{ color: "var(--text)", fontSize: 13, textAlign: "center", padding: 32, border: "1px dashed var(--border)", borderRadius: 12 }}>
-          No monthly costs logged yet.
+      <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between" }}>
+          <h2 style={{ fontSize: 15, margin: 0 }}>Unified Ledger</h2>
+          <span style={{ fontSize: 12, color: "var(--text)" }}>{rows.length} entries</span>
         </div>
-      ) : (
-        costs.map((cost) => (
-          <div key={cost.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-h)" }}>{cost.month}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#22c55e" }}>
-                ₹{cost.cost_per_sqft}/sqft overhead
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 8 }}>
-              {[
-                { label: "Electricity", value: `₹${cost.electricity_bill.toLocaleString()}` },
-                { label: "Wages", value: `₹${cost.total_wages.toLocaleString()}` },
-                { label: "Segments", value: `₹${cost.segments_cost.toLocaleString()}` },
-                { label: "Polish Bricks", value: `₹${cost.polishing_bricks_cost.toLocaleString()}` },
-                { label: "Epoxy", value: `₹${cost.epoxy_cost.toLocaleString()}` },
-                { label: "Other", value: `₹${cost.other_cost.toLocaleString()}` },
-              ].map((col) => (
-                <div key={col.label} style={{ background: "var(--bg)", borderRadius: 8, padding: "8px 10px" }}>
-                  <div style={{ fontSize: 9, color: "var(--text)", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-h)" }}>{col.value}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", background: "var(--bg)", borderRadius: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--text)" }}>
-                Total Overhead: <strong style={{ color: "#ef4444" }}>₹{cost.total_overhead.toLocaleString()}</strong>
-              </span>
-              <span style={{ fontSize: 11, color: "var(--text)" }}>
-                Sqft Processed: <strong style={{ color: "#f59e0b" }}>{cost.sqft_processed.toLocaleString()}</strong>
-              </span>
-            </div>
+        {loading ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--text)" }}>Loading ledger...</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--text)" }}>No ledger entries yet.</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ minWidth: 900, width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: "var(--bg)" }}>
+                  {["Date", "Type", "Category", "Description", "Machine", "Block", "Stone", "Quarry", "Amount", "Source"].map((head) => (
+                    <th key={head} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, textTransform: "uppercase", color: "var(--text)", borderBottom: "1px solid var(--border)" }}>{head}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 100).map((row) => (
+                  <tr key={row.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td style={{ padding: "10px 12px" }}>{new Date(row.date).toLocaleDateString("en-IN")}</td>
+                    <td style={{ padding: "10px 12px", fontWeight: 700, color: row.type === "income" ? "#16a34a" : row.type === "expense" ? "#ef4444" : "#2563eb" }}>{row.type}</td>
+                    <td style={{ padding: "10px 12px" }}>{row.category.replaceAll("_", " ")}</td>
+                    <td style={{ padding: "10px 12px" }}>{row.description}</td>
+                    <td style={{ padding: "10px 12px" }}>{row.machineId || "-"}</td>
+                    <td style={{ padding: "10px 12px" }}>{row.block || "-"}</td>
+                    <td style={{ padding: "10px 12px" }}>{row.stone || "-"}</td>
+                    <td style={{ padding: "10px 12px" }}>{row.quarry || "-"}</td>
+                    <td style={{ padding: "10px 12px", fontWeight: 800 }}>{money(row.amount)}</td>
+                    <td style={{ padding: "10px 12px", color: "var(--text)" }}>{row.source}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))
-      )}
+        )}
+      </div>
     </div>
   );
 }

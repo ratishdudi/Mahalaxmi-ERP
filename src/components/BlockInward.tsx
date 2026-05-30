@@ -1,19 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { UI, cardStyle } from "../styles"; // Assuming these exist
+import { cardStyle } from "../styles"; // Assuming these exist
+import { getCostProfile, QUARRY_PROFILES, STONE_PROFILES, money } from "../costing";
 
-const STONE_VARIETIES = [
-  "Markino Black", "Rajasthan Black", "Pebble Black", "Coin Black",
-  "Ash Black", "Pearl Black", "Black Galaxy", "Kotda Black",
-  "Majestic Black", "Forest Black", "Fish Black",
-  "P-White (Platinum)", "S White", "Cotton White", "China White",
-  "Alaska White", "Viscon White", "Steel Grey", "Armani Grey",
-  "Web Grey", "Moon White", "Kashmir White",
-  "Crystal Yellow", "Alaska Gold", "Alaska Mango", "Tiger Skin Gold",
-  "Titanium Gold", "Imperial Gold", "Desert Brown", "Z Brown", "Brazil Brown",
-  "Sindoori Red", "Kharda Red", "Ruby Red", "Lakha Red", "Rosy Pink", "Chima Pink",
-  "Blue Dunes", "Jasper Blue", "Alaska Pink", "Alaska Red", "Fantasy Brown",
-];
+const STONE_VARIETIES = STONE_PROFILES.map((stone) => stone.name);
 
 type Block = {
   id: string;
@@ -34,6 +24,7 @@ export default function BlockInward() {
   const [landedCost, setLandedCost] = useState("");
   const [isOwnBlock, setIsOwnBlock] = useState(true);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [quarrySuggestions, setQuarrySuggestions] = useState<string[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -68,6 +59,16 @@ export default function BlockInward() {
       : []);
   }
 
+  function handleQuarryChange(value: string) {
+    setQuarryName(value);
+    setQuarrySuggestions(value.length > 0
+      ? QUARRY_PROFILES
+          .filter((q) => q.name.toLowerCase().includes(value.toLowerCase()) || q.region.toLowerCase().includes(value.toLowerCase()))
+          .map((q) => q.name)
+          .slice(0, 5)
+      : []);
+  }
+
   async function handleSubmit() {
     if (!stoneType || !weightTons || !landedCost) {
       setMessage("❌ Please fill all fields.");
@@ -94,6 +95,10 @@ export default function BlockInward() {
     input: { width: "100%", padding: "12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 16, boxSizing: "border-box" as const },
     label: { fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" as const, marginBottom: 6, display: "block" }
   };
+  const costProfile = getCostProfile(stoneType, quarryName);
+  const landedCostNumber = Number(landedCost || 0);
+  const expectedSqft = Number(weightTons || 0) > 0 ? Math.round(Number(weightTons) * 1000 * (costProfile.expectedYieldPct / 100)) : 0;
+  const purchasePerExpectedSqft = expectedSqft > 0 ? landedCostNumber / expectedSqft : 0;
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px" }} className="fancy-in">
@@ -129,6 +134,16 @@ export default function BlockInward() {
           )}
         </div>
 
+        <div style={{ marginBottom: 16, position: "relative" }}>
+          <label style={S.label}>Quarry / Source</label>
+          <input value={quarryName} onChange={(e) => handleQuarryChange(e.target.value)} placeholder="e.g. Jalore, Kotda, Ongole" style={S.input} />
+          {quarrySuggestions.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #e5e7eb", borderRadius: 8, zIndex: 10, marginTop: 4, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+              {quarrySuggestions.map((q) => <div key={q} onClick={() => { setQuarryName(q); setQuarrySuggestions([]); }} style={{ padding: "12px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}>{q}</div>)}
+            </div>
+          )}
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div>
             <label style={S.label}>Weight (Tons)</label>
@@ -139,6 +154,28 @@ export default function BlockInward() {
             <input type="number" value={landedCost} onChange={(e) => setLandedCost(e.target.value)} style={S.input} />
           </div>
         </div>
+
+        {(stoneType || quarryName || weightTons || landedCost) && (
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#111827", marginBottom: 10 }}>Cost Intelligence Preview</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              {[
+                { label: "Hardness", value: `${costProfile.hardnessMultiplier}x`, color: costProfile.hardnessMultiplier > 1.12 ? "#ef4444" : "#2563eb" },
+                { label: "Yield Est.", value: `${costProfile.expectedYieldPct}%`, color: "#16a34a" },
+                { label: "Base Price", value: costProfile.basePrice ? money(costProfile.basePrice) : "Learning", color: "#111827" },
+                { label: "Est. Buy/Sqft", value: purchasePerExpectedSqft > 0 ? money(purchasePerExpectedSqft) : "-", color: "#f59e0b" },
+              ].map((item) => (
+                <div key={item.label} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", marginBottom: 3 }}>{item.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: item.color }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            {costProfile.quarry && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>{costProfile.quarry.notes}</div>
+            )}
+          </div>
+        )}
 
         <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", padding: "14px", background: "#111827", color: "white", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}>
           {loading ? "Saving..." : "Log Block"}
@@ -152,7 +189,7 @@ export default function BlockInward() {
         <div key={block.id} style={{ ...cardStyle, padding: 16, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 15 }}>{block.block_no}</div>
-            <div style={{ fontSize: 13, color: "#6b7280" }}>{block.stone_type}</div>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>{block.stone_type}{block.quarry_name ? ` / ${block.quarry_name}` : ""}</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: 14 }}>{block.weight_tons}T</div>

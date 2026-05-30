@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { STATUS } from "../constants";
+import SmartTextInput from "./SmartTextInput";
+import { canonicalName, uniqueCanonicalNames } from "../names";
 
 type Block = {
   id: string;
@@ -32,6 +34,7 @@ export default function SalesEntry() {
   const [finishedBlocks, setFinishedBlocks] = useState<Block[]>([]);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [allSales, setAllSales] = useState<Sale[]>([]); 
+  const [invoiceSale, setInvoiceSale] = useState<Sale | null>(null);
   
   // Form State
   const [selectedBlockId, setSelectedBlockId] = useState("");
@@ -79,11 +82,12 @@ export default function SalesEntry() {
 
   const isYieldRequired = selectedBlock && (!selectedBlock.total_sqft || selectedBlock.total_sqft === 0);
   const currentTotalSqft = isYieldRequired ? Number(totalYieldInput) : (selectedBlock?.total_sqft || 0);
-  const remainingSqft = currentTotalSqft - totalSoldSoFar;
+  const remainingSqft = Math.max(currentTotalSqft - totalSoldSoFar, 0);
 
   // Auto-calculated Invoice Logic
   const computedTotalAmount = Number(sqftSold) * Number(ratePerSqft) || 0;
   const currentPaid = Number(amountPaid) || 0;
+  const partySuggestions = uniqueCanonicalNames(allSales.map((sale) => sale.buyer_name));
 
   // 🔥 Smart Payment Status Logic 
   let autoPaymentStatus = "due";
@@ -111,13 +115,24 @@ export default function SalesEntry() {
       return;
     }
 
-    if (inputSqft > remainingSqft) {
+    if (isYieldRequired && (!currentTotalSqft || currentTotalSqft <= 0)) {
+      setMessage("❌ Enter the total block yield before recording this sale.");
+      return;
+    }
+
+    if (inputPaid > computedTotalAmount) {
+      setMessage("❌ Amount paid cannot be more than the invoice value.");
+      return;
+    }
+
+    if (inputSqft > remainingSqft || (isYieldRequired && inputSqft + totalSoldSoFar > currentTotalSqft)) {
       setMessage(`❌ Cannot sell ${inputSqft} Sqft. Only ${remainingSqft} Sqft remaining on this block.`);
       return;
     }
 
     setLoading(true);
     setMessage("");
+    const cleanBuyerName = canonicalName(buyerName, partySuggestions);
 
     if (isYieldRequired) {
       const { error: yieldError } = await supabase
@@ -135,7 +150,7 @@ export default function SalesEntry() {
     // Insert using the Smart Status
     const { error: saleError } = await supabase.from("sales").insert({
       block_id: selectedBlockId,
-      buyer_name: buyerName,
+      buyer_name: cleanBuyerName,
       sqft_sold: inputSqft,
       rate_per_sqft: inputRate,
       total_amount: computedTotalAmount,
@@ -228,7 +243,13 @@ export default function SalesEntry() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
               <label style={S.label}>Buyer Name *</label>
-              <input type="text" placeholder="Enter party name" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} style={S.input} />
+              <SmartTextInput
+                value={buyerName}
+                onChange={setBuyerName}
+                suggestions={partySuggestions}
+                placeholder="Start typing party name"
+                style={S.input}
+              />
             </div>
             <div>
               <label style={S.label}>Square Feet Sold *</label>
@@ -293,7 +314,7 @@ export default function SalesEntry() {
           const statusColors: Record<string, string> = { paid: "#22c55e", partial: "#f59e0b", due: "#ef4444" };
           const color = statusColors[sale.payment_status] || "var(--text)";
           return (
-            <div key={sale.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 8, display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 1fr", gap: 10, alignItems: "center" }}>
+            <div key={sale.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 8, display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 1fr 90px", gap: 10, alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-h)" }}>{sale.buyer_name}</div>
                 <div style={{ fontSize: 10, color: "var(--text)", marginTop: 2 }}>Block: <span style={{ color: "#ef4444", fontWeight: 600 }}>{sale.blocks?.block_no}</span> ({sale.blocks?.stone_type})</div>
@@ -315,10 +336,82 @@ export default function SalesEntry() {
                   {sale.payment_status}
                 </span>
               </div>
+              <button type="button" onClick={() => setInvoiceSale(sale)} style={{ padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                Invoice
+              </button>
             </div>
           );
         })
       )}
+      {invoiceSale && (
+        <InvoiceModal sale={invoiceSale} onClose={() => setInvoiceSale(null)} />
+      )}
+    </div>
+  );
+}
+
+function InvoiceModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
+  const due = Number(sale.total_amount || 0) - Number(sale.amount_paid || 0);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "min(780px, 100%)", background: "#fff", borderRadius: 10, boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)", overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #e2e8f0" }}>
+          <strong>Invoice Preview</strong>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => window.print()} style={{ padding: "8px 12px", border: "none", borderRadius: 8, background: "#111827", color: "#fff", fontWeight: 700, cursor: "pointer" }}>Print</button>
+            <button onClick={onClose} style={{ padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff", cursor: "pointer" }}>Close</button>
+          </div>
+        </div>
+        <div id="invoice-print" style={{ padding: 32, color: "#111827" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "2px solid #111827", paddingBottom: 18, marginBottom: 22 }}>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: -1 }}>Mahalaxmi Granites</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Kishangarh, Rajasthan</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 900 }}>TAX INVOICE</div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>#{sale.id.slice(0, 8).toUpperCase()}</div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>{new Date(sale.sold_at).toLocaleDateString("en-IN")}</div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 22 }}>
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 14 }}>
+              <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", marginBottom: 6 }}>Bill To</div>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>{sale.buyer_name}</div>
+            </div>
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 14 }}>
+              <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", marginBottom: 6 }}>Block</div>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>{sale.blocks?.block_no || "-"}</div>
+              <div style={{ fontSize: 13, color: "#64748b" }}>{sale.blocks?.stone_type || "-"}</div>
+            </div>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc" }}>
+                {["Description", "Sqft", "Rate", "Amount"].map((h) => (
+                  <th key={h} style={{ padding: 12, textAlign: h === "Description" ? "left" : "right", borderBottom: "1px solid #e2e8f0", fontSize: 11, color: "#64748b", textTransform: "uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{sale.blocks?.stone_type || "Granite slabs"}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", textAlign: "right" }}>{Number(sale.sqft_sold).toLocaleString("en-IN")}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", textAlign: "right" }}>Rs. {Number(sale.rate_per_sqft).toLocaleString("en-IN")}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", textAlign: "right", fontWeight: 800 }}>Rs. {Number(sale.total_amount).toLocaleString("en-IN")}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ width: 280 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}><span>Total</span><strong>Rs. {Number(sale.total_amount).toLocaleString("en-IN")}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}><span>Paid</span><strong>Rs. {Number(sale.amount_paid).toLocaleString("en-IN")}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "2px solid #111827", fontSize: 18 }}><span>Due</span><strong>Rs. {due.toLocaleString("en-IN")}</strong></div>
+            </div>
+          </div>
+          <div style={{ marginTop: 28, fontSize: 11, color: "#64748b" }}>Generated by Mahalaxmi ERP. Please verify dispatch and payment details before sharing.</div>
+        </div>
+      </div>
     </div>
   );
 }

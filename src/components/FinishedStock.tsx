@@ -102,10 +102,10 @@ export default function FinishedStock() {
 
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 16 },
-    label: { fontSize: 11, color: "#555", textTransform: "uppercase" as const, letterSpacing: "0.1em", display: "block", marginBottom: 6 },
-    select: { width: "100%", padding: "10px 14px", background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 8, color: "#e8e8e8", fontSize: 14, boxSizing: "border-box" as const },
-    card: { background: "#111", border: "1px solid #1e1e1e", borderRadius: 16, padding: 20, marginBottom: 20 },
-    input: { width: "100%", padding: "10px 14px", background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 8, color: "#e8e8e8", fontSize: 14, boxSizing: "border-box" as const },
+    label: { fontSize: 11, color: "var(--text)", textTransform: "uppercase" as const, letterSpacing: "0.08em", display: "block", marginBottom: 6 },
+    select: { width: "100%", padding: "10px 14px", minHeight: 44, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
+    card: { background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 20, marginBottom: 20 },
+    input: { width: "100%", padding: "10px 14px", minHeight: 44, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-h)", fontSize: 14, boxSizing: "border-box" as const },
   };
 
   return (
@@ -114,7 +114,7 @@ export default function FinishedStock() {
       {/* Header */}
       <div style={{ paddingTop: 20, marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>✅ Finished Stock</h1>
-        <p style={{ color: "#555", fontSize: 13, marginTop: 4 }}>
+        <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>
           Log polished slabs ready for sale. Sqft measured at sale time.
         </p>
       </div>
@@ -133,7 +133,7 @@ export default function FinishedStock() {
         <div style={{ marginBottom: 14 }}>
           <label style={S.label}>Select Finished Block *</label>
           {finishedBlocks.length === 0 ? (
-            <div style={{ padding: "12px 14px", background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 8, fontSize: 13, color: "#555" }}>
+            <div style={{ padding: "12px 14px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, color: "var(--text)" }}>
               No blocks with "finished" status yet. Complete a liner session first.
             </div>
           ) : (
@@ -152,7 +152,7 @@ export default function FinishedStock() {
         {selectedBlock && (() => {
           const block = finishedBlocks.find((b) => b.id === selectedBlock);
           return block ? (
-            <div style={{ background: "#0a0a0a", border: "1px solid #27ae6033", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ background: "var(--bg)", border: "1px solid #22c55e33", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                 {[
                   { label: "Stone Type", value: block.stone_type },
@@ -160,13 +160,13 @@ export default function FinishedStock() {
                   { label: "Purchase Cost", value: `₹${block.landed_cost.toLocaleString()}` },
                 ].map((col) => (
                   <div key={col.label}>
-                    <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
+                    <div style={{ fontSize: 9, color: "var(--text)", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>{col.value}</div>
                   </div>
                 ))}
               </div>
               {block.quarry_name && (
-                <div style={{ fontSize: 11, color: "#555", marginTop: 8 }}>📍 {block.quarry_name}</div>
+                <div style={{ fontSize: 11, color: "var(--text)", marginTop: 8 }}>Location: {block.quarry_name}</div>
               )}
             </div>
           ) : null;
@@ -178,7 +178,7 @@ export default function FinishedStock() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {FINISHES.map((f) => (
               <button key={f} onClick={() => setFinish(f)}
-                style={{ padding: "10px 0", border: "1px solid", borderColor: finish === f ? "#27ae60" : "#1e1e1e", background: finish === f ? "#27ae6022" : "transparent", color: finish === f ? "#27ae60" : "#555", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                style={{ padding: "10px 0", border: "1px solid", borderColor: finish === f ? "#22c55e" : "var(--border)", background: finish === f ? "#22c55e22" : "transparent", color: finish === f ? "#16a34a" : "var(--text)", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                 {f}
               </button>
             ))}
@@ -191,7 +191,7 @@ export default function FinishedStock() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {THICKNESSES.map((t) => (
               <button key={t} onClick={() => setThickness(t)}
-                style={{ padding: "10px 0", border: "1px solid", borderColor: thickness === t ? "#27ae60" : "#1e1e1e", background: thickness === t ? "#27ae6022" : "transparent", color: thickness === t ? "#27ae60" : "#555", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                style={{ padding: "10px 0", border: "1px solid", borderColor: thickness === t ? "#22c55e" : "var(--border)", background: thickness === t ? "#22c55e22" : "transparent", color: thickness === t ? "#16a34a" : "var(--text)", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                 {t}{t === "18mm" ? " (Std)" : ""}
               </button>
             ))}
@@ -210,7 +210,7 @@ export default function FinishedStock() {
         </div>
 
         <button onClick={handleSubmit} disabled={loading}
-          style={{ width: "100%", padding: "12px 0", background: loading ? "#333" : "#27ae60", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
+          style={{ width: "100%", padding: "12px 0", background: loading ? "var(--border)" : "#22c55e", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? "Saving..." : "✅ Log as Finished Stock — Ready to Sell"}
         </button>
 
@@ -227,7 +227,7 @@ export default function FinishedStock() {
           Stock Ready to Sell ({entries.length})
         </h2>
         {entries.length === 0 ? (
-          <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: 32, border: "1px dashed #1e1e1e", borderRadius: 12 }}>
+          <div style={{ color: "var(--text)", fontSize: 13, textAlign: "center", padding: 32, border: "1px dashed var(--border)", borderRadius: 12 }}>
             No finished stock yet.
           </div>
         ) : (
@@ -237,7 +237,7 @@ export default function FinishedStock() {
             const liveSqft = relatedBlock?.total_sqft;
 
             return (
-              <div key={entry.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderLeft: "3px solid #27ae60", borderRadius: 12, padding: 16, marginBottom: 10 }}>
+              <div key={entry.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderLeft: "3px solid #22c55e", borderRadius: 12, padding: 16, marginBottom: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: "#c0392b" }}>{entry.block_no}</div>
@@ -249,7 +249,7 @@ export default function FinishedStock() {
                     </div>
                     
                     {/* Live Dynamic Square Footage Badge */}
-                    <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: "var(--text)", marginTop: 4 }}>
                       Total Yield:{" "}
                       <span style={{ 
                         color: liveSqft && liveSqft > 0 ? "#22c55e" : "#d4a843", 
@@ -267,8 +267,8 @@ export default function FinishedStock() {
                     { label: "Thickness", value: entry.thickness },
                     { label: "Notes", value: entry.notes || "—" },
                   ].map((col) => (
-                    <div key={col.label} style={{ background: "#0a0a0a", borderRadius: 8, padding: "8px 10px" }}>
-                      <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
+                    <div key={col.label} style={{ background: "var(--bg)", borderRadius: 8, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 9, color: "var(--text)", textTransform: "uppercase", marginBottom: 2 }}>{col.label}</div>
                       <div style={{ fontSize: 12, fontWeight: 600 }}>{col.value}</div>
                     </div>
                   ))}

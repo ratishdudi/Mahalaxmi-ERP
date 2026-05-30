@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { STATUS } from "../constants";
+import { estimateMachineCost, getCostProfile, money } from "../costing";
 type Block = {
   id: string;
   block_no: string;
@@ -30,6 +31,14 @@ type MonthlyCost = {
   sqft_processed: number;
 };
 
+type MachineSessionCost = {
+  block_id: string;
+  machine_id: string;
+  stone_type: string;
+  duration_mins: number | null;
+  cost_rupees: number | null;
+};
+
 type BlockAnalysis = {
   block: Block;
   totalSqftSold: number;
@@ -38,7 +47,9 @@ type BlockAnalysis = {
   totalDue: number;
   avgSaleRate: number;
   purchaseCostPerSqft: number;
+  productionCostPerSqft: number;
   overheadPerSqft: number;
+  hardnessMultiplier: number;
   breakEvenPerSqft: number;
   profitPerSqft: number;
   totalProfit: number;
@@ -50,6 +61,7 @@ export default function BreakEven() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [monthlyCosts, setMonthlyCosts] = useState<MonthlyCost[]>([]);
+  const [machineSessions, setMachineSessions] = useState<MachineSessionCost[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
@@ -59,20 +71,25 @@ export default function BreakEven() {
 
   async function fetchAll() {
     setLoading(true);
-    const [blocksRes, salesRes, costsRes] = await Promise.all([
+    const [blocksRes, salesRes, costsRes, sessionsRes] = await Promise.all([
       supabase.from("blocks").select("*").in("status", [STATUS.READY_TO_SELL, STATUS.SOLD, STATUS.FINISHED]),
       supabase.from("sales").select("*"),
       supabase.from("monthly_costs").select("*").order("created_at", { ascending: false }),
+      supabase.from("machine_sessions").select("block_id, machine_id, stone_type, duration_mins, cost_rupees").not("stopped_at", "is", null),
     ]);
 
     if (blocksRes.data) setBlocks(blocksRes.data);
     if (salesRes.data) setSales(salesRes.data);
     if (costsRes.data) setMonthlyCosts(costsRes.data);
+    if (sessionsRes.data) setMachineSessions(sessionsRes.data as MachineSessionCost[]);
     setLoading(false);
   }
 
-  // Get latest overhead per sqft from most recent monthly cost entry
-  const latestOverhead = monthlyCosts.length > 0 ? monthlyCosts[0].cost_per_sqft : 0;
+  const totalLoggedOverhead = monthlyCosts.reduce((sum, cost) => sum + Number(cost.total_overhead || 0), 0);
+  const totalProcessedSqft = monthlyCosts.reduce((sum, cost) => sum + Number(cost.sqft_processed || 0), 0);
+  const blendedOverhead = totalProcessedSqft > 0 ? totalLoggedOverhead / totalProcessedSqft : 0;
+  const latestOverhead = monthlyCosts.find((cost) => Number(cost.cost_per_sqft) > 0)?.cost_per_sqft || 0;
+  const overheadRate = blendedOverhead || latestOverhead;
 
   // Build analysis for each block
   const analyses: BlockAnalysis[] = blocks
@@ -87,12 +104,20 @@ export default function BreakEven() {
 
       // Cost calculations
       const totalSqft = block.total_sqft || 0;
+      const costProfile = getCostProfile(block.stone_type, block.quarry_name || "");
+      const blockSessions = machineSessions.filter((session) => session.block_id === block.id);
+      const productionCost = blockSessions.reduce((sum, session) => {
+        const storedCost = Number(session.cost_rupees || 0);
+        if (storedCost > 0) return sum + storedCost;
+        return sum + estimateMachineCost(session.machine_id, Number(session.duration_mins || 0), session.stone_type || block.stone_type, block.quarry_name || "");
+      }, 0);
       const purchaseCostPerSqft = totalSqft > 0 ? block.landed_cost / totalSqft : 0;
-      const overheadPerSqft = latestOverhead;
-      const breakEvenPerSqft = purchaseCostPerSqft + overheadPerSqft;
+      const productionCostPerSqft = totalSqft > 0 ? productionCost / totalSqft : 0;
+      const overheadPerSqft = overheadRate * costProfile.hardnessMultiplier;
+      const breakEvenPerSqft = purchaseCostPerSqft + productionCostPerSqft + overheadPerSqft;
       const profitPerSqft = avgSaleRate - breakEvenPerSqft;
       const totalProfit = profitPerSqft * totalSqftSold;
-      const marginPct = breakEvenPerSqft > 0 ? (profitPerSqft / breakEvenPerSqft) * 100 : 0;
+      const marginPct = breakEvenPerSqft > 0 && totalSqftSold > 0 ? (profitPerSqft / breakEvenPerSqft) * 100 : 0;
 
       return {
         block,
@@ -102,22 +127,25 @@ export default function BreakEven() {
         totalDue,
         avgSaleRate,
         purchaseCostPerSqft,
+        productionCostPerSqft,
         overheadPerSqft,
+        hardnessMultiplier: costProfile.hardnessMultiplier,
         breakEvenPerSqft,
         profitPerSqft,
         totalProfit,
         marginPct,
-        isProfit: profitPerSqft > 0,
+        isProfit: totalSqftSold > 0 && profitPerSqft > 0,
       };
     })
-    .filter((a) => filter === "all" || (filter === "profit" && a.isProfit) || (filter === "loss" && !a.isProfit));
+    .filter((a) => filter === "all" || (filter === "profit" && a.isProfit) || (filter === "loss" && a.totalSqftSold > 0 && !a.isProfit));
 
   // Summary stats
   const totalRevenue = analyses.reduce((sum, a) => sum + a.totalRevenue, 0);
   const totalProfit = analyses.reduce((sum, a) => sum + a.totalProfit, 0);
   const totalDue = analyses.reduce((sum, a) => sum + a.totalDue, 0);
-  const profitBlocks = analyses.filter((a) => a.isProfit).length;
-  const lossBlocks = analyses.filter((a) => !a.isProfit).length;
+  const soldAnalyses = analyses.filter((a) => a.totalSqftSold > 0);
+  const profitBlocks = soldAnalyses.filter((a) => a.isProfit).length;
+  const lossBlocks = soldAnalyses.filter((a) => !a.isProfit).length;
 
   const S: Record<string, React.CSSProperties> = {
     page: { maxWidth: 900, margin: "0 auto", padding: 16 },
@@ -136,19 +164,19 @@ export default function BreakEven() {
       </div>
 
       {/* Overhead info banner */}
-      <div style={{ background: latestOverhead > 0 ? "#22c55e11" : "#f59e0b11", border: `1px solid ${latestOverhead > 0 ? "#22c55e33" : "#f59e0b33"}`, borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: overheadRate > 0 ? "#22c55e11" : "#f59e0b11", border: `1px solid ${overheadRate > 0 ? "#22c55e33" : "#f59e0b33"}`, borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 10, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>
-            Current Overhead Rate (from Monthly Costs)
+            Factory Overhead Rate (from Monthly Costs)
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: latestOverhead > 0 ? "#22c55e" : "#f59e0b" }}>
-            {latestOverhead > 0 ? `₹${latestOverhead}/sqft` : "⚠ Not set — log Monthly Costs first"}
+          <div style={{ fontSize: 20, fontWeight: 800, color: overheadRate > 0 ? "#22c55e" : "#f59e0b" }}>
+            {overheadRate > 0 ? `Rs. ${Math.round(overheadRate)}/sqft` : "Not set - log Monthly Costs first"}
           </div>
         </div>
         {monthlyCosts.length > 0 && (
           <div style={{ fontSize: 11, color: "var(--text)", textAlign: "right" }}>
-            From: {monthlyCosts[0].month}<br />
-            {monthlyCosts[0].sqft_processed.toLocaleString()} sqft processed
+            {blendedOverhead > 0 ? "Blended from all logged months" : `Latest: ${monthlyCosts[0].month}`}<br />
+            {totalProcessedSqft.toLocaleString()} sqft processed
           </div>
         )}
       </div>
@@ -193,20 +221,20 @@ export default function BreakEven() {
         </div>
       ) : (
         analyses.map((a) => (
-          <div key={a.block.id} style={{ ...S.card, borderLeft: `3px solid ${a.isProfit ? "#22c55e" : "#ef4444"}` }}>
+          <div key={a.block.id} style={{ ...S.card, borderLeft: `3px solid ${a.totalSqftSold === 0 ? "#94a3b8" : a.isProfit ? "#22c55e" : "#ef4444"}` }}>
             {/* Block Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "#ef4444" }}>{a.block.block_no}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-h)", marginTop: 2 }}>{a.block.stone_type}</div>
-                {a.block.quarry_name && <div style={{ fontSize: 11, color: "var(--text)", marginTop: 1 }}>📍 {a.block.quarry_name}</div>}
+                {a.block.quarry_name && <div style={{ fontSize: 11, color: "var(--text)", marginTop: 1 }}>Quarry: {a.block.quarry_name} / hardness {a.hardnessMultiplier}x</div>}
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, background: `${a.isProfit ? "#22c55e" : "#ef4444"}22`, color: a.isProfit ? "#22c55e" : "#ef4444", border: `1px solid ${a.isProfit ? "#22c55e" : "#ef4444"}44`, borderRadius: 6, padding: "3px 10px", fontWeight: 700, marginBottom: 4 }}>
-                  {a.isProfit ? "✅ PROFIT" : "❌ LOSS"}
+                <div style={{ fontSize: 11, background: `${a.totalSqftSold === 0 ? "#94a3b8" : a.isProfit ? "#22c55e" : "#ef4444"}22`, color: a.totalSqftSold === 0 ? "#64748b" : a.isProfit ? "#22c55e" : "#ef4444", border: `1px solid ${a.totalSqftSold === 0 ? "#94a3b8" : a.isProfit ? "#22c55e" : "#ef4444"}44`, borderRadius: 6, padding: "3px 10px", fontWeight: 700, marginBottom: 4 }}>
+                  {a.totalSqftSold === 0 ? "NOT SOLD" : a.isProfit ? "PROFIT" : "LOSS"}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: a.isProfit ? "#22c55e" : "#ef4444" }}>
-                  {a.marginPct > 0 ? "+" : ""}{Math.round(a.marginPct)}% margin
+                <div style={{ fontSize: 13, fontWeight: 800, color: a.totalSqftSold === 0 ? "#64748b" : a.isProfit ? "#22c55e" : "#ef4444" }}>
+                  {a.totalSqftSold === 0 ? "Awaiting sale" : `${a.marginPct > 0 ? "+" : ""}${Math.round(a.marginPct)}% margin`}
                 </div>
               </div>
             </div>
@@ -225,13 +253,20 @@ export default function BreakEven() {
                 </div>
                 <div style={{ fontSize: 16, color: "var(--text)" }}>+</div>
                 <div style={{ textAlign: "center", padding: "8px 12px", background: "var(--code-bg)", borderRadius: 8, flex: 1 }}>
-                  <div style={S.label}>Overhead</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#a855f7" }}>₹{Math.round(a.overheadPerSqft)}</div>
+                  <div style={S.label}>Production</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#ef4444" }}>
+                    {money(a.productionCostPerSqft)}
+                  </div>
+                </div>
+                <div style={{ fontSize: 16, color: "var(--text)" }}>+</div>
+                <div style={{ textAlign: "center", padding: "8px 12px", background: "var(--code-bg)", borderRadius: 8, flex: 1 }}>
+                  <div style={S.label}>Overhead x Hardness</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#a855f7" }}>{money(a.overheadPerSqft)}</div>
                 </div>
                 <div style={{ fontSize: 16, color: "var(--text)" }}>=</div>
                 <div style={{ textAlign: "center", padding: "8px 12px", background: "var(--code-bg)", borderRadius: 8, flex: 1 }}>
                   <div style={S.label}>Break-Even</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#3b82f6" }}>₹{Math.round(a.breakEvenPerSqft)}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#3b82f6" }}>{money(a.breakEvenPerSqft)}</div>
                 </div>
                 <div style={{ fontSize: 16, color: "var(--text)" }}>vs</div>
                 <div style={{ textAlign: "center", padding: "8px 12px", background: "var(--code-bg)", borderRadius: 8, flex: 1 }}>

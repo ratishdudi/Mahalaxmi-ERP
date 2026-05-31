@@ -75,8 +75,18 @@ export default function BlockInward() {
       return;
     }
     setLoading(true);
+    const { error: stoneTypeError } = await supabase.from("stone_types").upsert(
+      { name: stoneType.trim() },
+      { onConflict: "name" }
+    );
+    if (stoneTypeError && !["PGRST205", "42P01"].includes(stoneTypeError.code || "")) {
+      setMessage("âŒ Stone type master update failed: " + stoneTypeError.message);
+      setLoading(false);
+      return;
+    }
+
     const { error } = await supabase.from("blocks").insert({
-      block_no: nextBlockNo, stone_type: stoneType, quarry_name: quarryName,
+      block_no: nextBlockNo, stone_type: stoneType.trim(), quarry_name: quarryName.trim(),
       weight_tons: parseFloat(weightTons), landed_cost: parseFloat(landedCost),
       is_own_block: isOwnBlock, status: "yard"
     });

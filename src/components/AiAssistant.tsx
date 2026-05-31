@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabaseClient";
+import MarkdownMessage from "./MarkdownMessage";
 
 type Message = { role: "user" | "ai"; content: string };
 
@@ -39,12 +40,13 @@ export default function AiAssistant() {
     if (!prompt.trim()) return;
 
     const userMessage: Message = { role: "user", content: prompt };
-    setMessages((prev) => [...prev, userMessage]);
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
     setPrompt("");
     setLoading(true);
 
     const { data, error } = await supabase.functions.invoke('factory-ai', {
-      body: { prompt: userMessage.content }
+      body: { prompt: userMessage.content, messages: nextMessages.slice(-10) }
     });
 
     setMessages((prev) => [...prev, { role: "ai", content: error ? "❌ Error: " + error.message : data.message }]);
@@ -72,8 +74,8 @@ export default function AiAssistant() {
             <div style={{ width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: msg.role === "ai" ? "#18181b" : "transparent", fontSize: 16 }}>
               {msg.role === "ai" ? "✨" : "👤"}
             </div>
-            <div style={{ flex: 1, lineHeight: 1.6, fontSize: 15, whiteSpace: "pre-wrap", paddingTop: 2 }}>
-              {msg.content}
+            <div style={{ flex: 1, lineHeight: 1.6, fontSize: 15, paddingTop: 2 }}>
+              <MarkdownMessage content={msg.content} />
             </div>
           </div>
         ))}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
+import MarkdownMessage from "./MarkdownMessage";
 import "./Layout.css";
 
 interface LayoutProps {
@@ -166,13 +167,14 @@ function AiDrawer() {
     e.preventDefault();
     if (!prompt.trim()) return;
     const userMsg: Msg = { role: "user", content: prompt.trim() };
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setPrompt("");
     setLoading(true);
 
     try {
       const { data, error } = await supabase.functions.invoke("factory-ai", {
-        body: { prompt: userMsg.content },
+        body: { prompt: userMsg.content, messages: nextMessages.slice(-10) },
       });
       if (error) throw error;
       setMessages((prev) => [...prev, { role: "ai", content: data.message }]);
@@ -189,6 +191,13 @@ function AiDrawer() {
           <strong>Factory AI</strong>
           <span>Operational assistant</span>
         </div>
+        <button
+          className="erp-ai-clear"
+          type="button"
+          onClick={() => setMessages([{ role: "ai", content: "Memory reset. Ask me with a fresh context." }])}
+        >
+          Clear
+        </button>
       </div>
       <div className="erp-ai-prompts">
         {["Who owes money?", "Machine cost trend", "Slow stock"].map((q) => (
@@ -198,7 +207,7 @@ function AiDrawer() {
       <div className="erp-ai-messages">
         {messages.map((msg, i) => (
           <div key={i} className={`erp-message ${msg.role === "user" ? "is-user" : ""}`}>
-            {msg.content}
+            <MarkdownMessage content={msg.content} />
           </div>
         ))}
         {loading && <div className="erp-ai-loading">Thinking...</div>}

@@ -31,6 +31,13 @@ type MonthlyCost = {
   sqft_processed: number;
 };
 
+type LedgerCost = {
+  entry_type: string;
+  category: string;
+  amount: number;
+  processed_sqft: number | null;
+};
+
 type MachineSessionCost = {
   block_id: string;
   machine_id: string;
@@ -61,6 +68,7 @@ export default function BreakEven() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [monthlyCosts, setMonthlyCosts] = useState<MonthlyCost[]>([]);
+  const [ledgerCosts, setLedgerCosts] = useState<LedgerCost[]>([]);
   const [machineSessions, setMachineSessions] = useState<MachineSessionCost[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -71,22 +79,29 @@ export default function BreakEven() {
 
   async function fetchAll() {
     setLoading(true);
-    const [blocksRes, salesRes, costsRes, sessionsRes] = await Promise.all([
+    const [blocksRes, salesRes, costsRes, ledgerRes, sessionsRes] = await Promise.all([
       supabase.from("blocks").select("*").in("status", [STATUS.READY_TO_SELL, STATUS.SOLD, STATUS.FINISHED]),
       supabase.from("sales").select("*"),
       supabase.from("monthly_costs").select("*").order("created_at", { ascending: false }),
+      supabase.from("factory_ledger").select("entry_type, category, amount, processed_sqft").eq("entry_type", "expense"),
       supabase.from("machine_sessions").select("block_id, machine_id, stone_type, duration_mins, cost_rupees").not("stopped_at", "is", null),
     ]);
 
     if (blocksRes.data) setBlocks(blocksRes.data);
     if (salesRes.data) setSales(salesRes.data);
     if (costsRes.data) setMonthlyCosts(costsRes.data);
+    if (ledgerRes.data) setLedgerCosts(ledgerRes.data as LedgerCost[]);
     if (sessionsRes.data) setMachineSessions(sessionsRes.data as MachineSessionCost[]);
     setLoading(false);
   }
 
-  const totalLoggedOverhead = monthlyCosts.reduce((sum, cost) => sum + Number(cost.total_overhead || 0), 0);
-  const totalProcessedSqft = monthlyCosts.reduce((sum, cost) => sum + Number(cost.sqft_processed || 0), 0);
+  const ledgerOverheadRows = ledgerCosts.filter((row) => !["block_purchase"].includes(row.category));
+  const totalLoggedOverhead = ledgerOverheadRows.length > 0
+    ? ledgerOverheadRows.reduce((sum, cost) => sum + Number(cost.amount || 0), 0)
+    : monthlyCosts.reduce((sum, cost) => sum + Number(cost.total_overhead || 0), 0);
+  const totalProcessedSqft = ledgerOverheadRows.length > 0
+    ? ledgerOverheadRows.reduce((sum, cost) => sum + Number(cost.processed_sqft || 0), 0)
+    : monthlyCosts.reduce((sum, cost) => sum + Number(cost.sqft_processed || 0), 0);
   const blendedOverhead = totalProcessedSqft > 0 ? totalLoggedOverhead / totalProcessedSqft : 0;
   const latestOverhead = monthlyCosts.find((cost) => Number(cost.cost_per_sqft) > 0)?.cost_per_sqft || 0;
   const overheadRate = blendedOverhead || latestOverhead;

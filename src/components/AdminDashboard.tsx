@@ -57,8 +57,8 @@ export default function AdminDashboard() {
   async function fetchDashboardData() {
     setLoading(true);
     const [blocksRes, salesRes, sessionsRes] = await Promise.all([
-      supabase.from("blocks").select("status, total_sqft"),
-      supabase.from("sales").select("id, buyer_name, total_amount, amount_paid, payment_status"),
+      supabase.from("blocks").select("id, status, total_sqft"),
+      supabase.from("sales").select("id, block_id, buyer_name, total_amount, amount_paid, payment_status, sqft_sold"),
       supabase.from("machine_sessions").select("id, stopped_at").is("stopped_at", null),
     ]);
 
@@ -68,9 +68,16 @@ export default function AdminDashboard() {
     let outstanding = 0;
     const dueList: PendingPayment[] = [];
 
+    const soldByBlock = new Map<string, number>();
+    salesRes.data?.forEach((sale) => {
+      soldByBlock.set(sale.block_id, (soldByBlock.get(sale.block_id) || 0) + Number(sale.sqft_sold || 0));
+    });
+
     blocksRes.data?.forEach((block) => {
       if ([STATUS.YARD, STATUS.CUTTING, STATUS.UNPOLISHED, STATUS.POLISHING].includes(block.status)) activeYard++;
-      if (block.status === STATUS.READY_TO_SELL) readySqft += Number(block.total_sqft || 0);
+      if (block.status === STATUS.READY_TO_SELL) {
+        readySqft += Math.max(Number(block.total_sqft || 0) - Number(soldByBlock.get(block.id) || 0), 0);
+      }
     });
 
     salesRes.data?.forEach((sale) => {

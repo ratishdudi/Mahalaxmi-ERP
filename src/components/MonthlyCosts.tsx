@@ -76,13 +76,37 @@ const CATEGORIES = [
   "transport",
   "loading_dispatch",
   "job_work",
+  "payment_received",
+  "sale_invoice",
   "sale_receipt",
+  "opening_cash",
   "owner_withdrawal",
   "other",
 ];
 
-function monthKey(date: string) {
-  return new Date(date).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+function periodKey(date: string) {
+  const value = new Date(date);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function periodLabel(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+function cashDelta(row: LedgerViewRow) {
+  if (row.type === "income" && row.category !== "sale_invoice") return row.amount;
+  if (row.type === "expense" || row.type === "asset") return -row.amount;
+  if (row.type === "adjustment") return row.category === "opening_cash" ? row.amount : 0;
+  return 0;
+}
+
+function isReceipt(row: LedgerViewRow) {
+  return row.type === "income" && row.category !== "sale_invoice";
+}
+
+function isInvoice(row: LedgerViewRow) {
+  return row.type === "income" && row.category === "sale_invoice";
 }
 
 export default function MonthlyCosts() {
@@ -94,6 +118,7 @@ export default function MonthlyCosts() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [ledgerMissing, setLedgerMissing] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState("all");
 
   const [entryType, setEntryType] = useState<LedgerType>("expense");
   const [category, setCategory] = useState("electricity");
@@ -144,10 +169,11 @@ export default function MonthlyCosts() {
 
     const selectedBlock = blocks.find((block) => block.id === blockId);
     const partySuggestions = uniqueCanonicalNames([...sales.map((sale) => sale.buyer_name), ...ledger.map((entry) => entry.party_name || "")]);
+    const finalCategory = entryType === "income" && partyName && category === "other" ? "payment_received" : category;
     const { error } = await supabase.from("factory_ledger").insert({
       entry_date: entryDate,
       entry_type: entryType,
-      category,
+      category: finalCategory,
       description,
       amount: value,
       block_id: blockId || null,
@@ -252,16 +278,27 @@ export default function MonthlyCosts() {
       processedSqft: Number(cost.sqft_processed || 0),
     }));
 
-    return [...manualRows, ...blockRows, ...saleRows, ...paymentRows, ...monthlyRows]
+    const fallbackRows = [...blockRows, ...saleRows, ...paymentRows, ...monthlyRows];
+    const integratedRows = manualRows.length > 0 ? manualRows : fallbackRows;
+
+    return integratedRows
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [ledger, blocks, sales, legacyMonthly]);
 
-  const currentMonth = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-  const monthRows = rows.filter((row) => monthKey(row.date) === currentMonth);
-  const expenses = monthRows.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0);
-  const income = monthRows.filter((row) => row.type === "income").reduce((sum, row) => sum + row.amount, 0);
-  const purchases = monthRows.filter((row) => row.type === "asset").reduce((sum, row) => sum + row.amount, 0);
-  const processed = monthRows.reduce((sum, row) => sum + Number(row.processedSqft || 0), 0);
+  const periods = Array.from(new Set(rows.map((row) => periodKey(row.date)))).sort().reverse();
+  const periodRows = selectedPeriod === "all" ? rows : rows.filter((row) => periodKey(row.date) === selectedPeriod);
+  const previousRows = selectedPeriod === "all" ? [] : rows.filter((row) => periodKey(row.date) < selectedPeriod);
+  const openingCash = previousRows.reduce((sum, row) => sum + cashDelta(row), 0);
+  const receipts = periodRows.filter(isReceipt).reduce((sum, row) => sum + row.amount, 0);
+  const invoiced = periodRows.filter(isInvoice).reduce((sum, row) => sum + row.amount, 0);
+  const expenses = periodRows.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0);
+  const purchases = periodRows.filter((row) => row.type === "asset").reduce((sum, row) => sum + row.amount, 0);
+  const cashMovement = periodRows.reduce((sum, row) => sum + cashDelta(row), 0);
+  const closingCash = openingCash + cashMovement;
+  const totalInvoiced = rows.filter(isInvoice).reduce((sum, row) => sum + row.amount, 0);
+  const totalReceived = rows.filter(isReceipt).reduce((sum, row) => sum + row.amount, 0);
+  const receivables = Math.max(totalInvoiced - totalReceived, 0);
+  const processed = periodRows.reduce((sum, row) => sum + Number(row.processedSqft || 0), 0);
   const overheadPerSqft = processed > 0 ? expenses / processed : 0;
   const partySuggestions = uniqueCanonicalNames([...sales.map((sale) => sale.buyer_name), ...ledger.map((entry) => entry.party_name || "")]);
 
@@ -277,7 +314,7 @@ export default function MonthlyCosts() {
       <div style={{ paddingTop: 10, marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: "var(--text-h)" }}>Factory Ledger</h1>
         <p style={{ color: "var(--text)", fontSize: 13, marginTop: 4 }}>
-          One place for costs, purchases, payments, overhead and production-linked adjustments.
+          Accounts view for invoices, receipts, cash movement, purchases and factory expenses.
         </p>
       </div>
 
@@ -287,11 +324,38 @@ export default function MonthlyCosts() {
         </div>
       )}
 
+      <div style={{ ...S.card, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-h)" }}>Accounting Period</div>
+          <div style={{ fontSize: 12, color: "var(--text)", marginTop: 2 }}>Invoices are separated from actual cash received.</div>
+        </div>
+        <select value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)} style={{ ...S.input, width: 220 }}>
+          <option value="all">All time</option>
+          {periods.map((key) => (
+            <option key={key} value={key}>{periodLabel(key)}</option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
+        {[
+          { label: "Opening Cash", value: money(openingCash), color: openingCash >= 0 ? "#2563eb" : "#ef4444" },
+          { label: "Cash Received", value: money(receipts), color: "#16a34a" },
+          { label: "Cash Out", value: money(expenses + purchases), color: "#ef4444" },
+          { label: "Closing Cash", value: money(closingCash), color: closingCash >= 0 ? "#16a34a" : "#ef4444" },
+        ].map((item) => (
+          <div key={item.label} style={S.card}>
+            <div style={S.label}>{item.label}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
         {[
-          { label: "Month Income", value: money(income), color: "#22c55e" },
-          { label: "Month Expenses", value: money(expenses), color: "#ef4444" },
-          { label: "Block Purchases", value: money(purchases), color: "#2563eb" },
+          { label: "Invoiced", value: money(invoiced), color: "#7c3aed" },
+          { label: "Receivables", value: money(receivables), color: "#f59e0b" },
+          { label: "Factory Expenses", value: money(expenses), color: "#ef4444" },
           { label: "Overhead / Sqft", value: overheadPerSqft > 0 ? money(overheadPerSqft) : "Need sqft", color: "#f59e0b" },
         ].map((item) => (
           <div key={item.label} style={S.card}>
@@ -310,7 +374,17 @@ export default function MonthlyCosts() {
           </div>
           <div>
             <label style={S.label}>Type</label>
-            <select value={entryType} onChange={(e) => setEntryType(e.target.value as LedgerType)} style={S.input}>
+            <select
+              value={entryType}
+              onChange={(e) => {
+                const nextType = e.target.value as LedgerType;
+                setEntryType(nextType);
+                if (nextType === "income") setCategory("payment_received");
+                if (nextType === "expense") setCategory("electricity");
+                if (nextType === "asset") setCategory("block_purchase");
+              }}
+              style={S.input}
+            >
               <option value="expense">Expense</option>
               <option value="income">Income</option>
               <option value="asset">Asset / Purchase</option>
@@ -372,11 +446,11 @@ export default function MonthlyCosts() {
       <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between" }}>
           <h2 style={{ fontSize: 15, margin: 0 }}>Unified Ledger</h2>
-          <span style={{ fontSize: 12, color: "var(--text)" }}>{rows.length} entries</span>
+          <span style={{ fontSize: 12, color: "var(--text)" }}>{periodRows.length} entries</span>
         </div>
         {loading ? (
           <div style={{ padding: 30, textAlign: "center", color: "var(--text)" }}>Loading ledger...</div>
-        ) : rows.length === 0 ? (
+        ) : periodRows.length === 0 ? (
           <div style={{ padding: 30, textAlign: "center", color: "var(--text)" }}>No ledger entries yet.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -389,7 +463,7 @@ export default function MonthlyCosts() {
                 </tr>
               </thead>
               <tbody>
-                {rows.slice(0, 100).map((row) => (
+                {periodRows.slice(0, 100).map((row) => (
                   <tr key={row.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "10px 12px" }}>{new Date(row.date).toLocaleDateString("en-IN")}</td>
                     <td style={{ padding: "10px 12px", fontWeight: 700, color: row.type === "income" ? "#16a34a" : row.type === "expense" ? "#ef4444" : "#2563eb" }}>{row.type}</td>

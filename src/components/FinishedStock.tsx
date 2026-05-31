@@ -13,6 +13,7 @@ type Block = {
   landed_cost: number;
   is_own_block: boolean;
   status: string;
+  slab_count?: number | null;
 };
 
 type FinishedEntry = {
@@ -27,12 +28,19 @@ type FinishedEntry = {
   blocks?: any; // Allows flexible access to the joined relationship payload safely
 };
 
+type SaleRow = {
+  block_id: string;
+  sqft_sold: number;
+};
+
 export default function FinishedStock() {
   const [finishedBlocks, setFinishedBlocks] = useState<Block[]>([]);
   const [entries, setEntries] = useState<FinishedEntry[]>([]);
+  const [sales, setSales] = useState<SaleRow[]>([]);
   const [selectedBlock, setSelectedBlock] = useState("");
   const [finish, setFinish] = useState("Polished");
   const [thickness, setThickness] = useState("18mm");
+  const [slabCount, setSlabCount] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -40,6 +48,7 @@ export default function FinishedStock() {
   useEffect(() => {
     fetchFinishedBlocks();
     fetchEntries();
+    fetchSales();
   }, []);
 
   async function fetchFinishedBlocks() {
@@ -55,9 +64,14 @@ export default function FinishedStock() {
     // Actively fetching total_sqft from the parent blocks table join
     const { data } = await supabase
       .from("finished_stock")
-      .select("*, blocks(total_sqft)")
+      .select("*, blocks(total_sqft, status)")
       .order("created_at", { ascending: false });
     if (data) setEntries(data as FinishedEntry[]);
+  }
+
+  async function fetchSales() {
+    const { data } = await supabase.from("sales").select("block_id, sqft_sold");
+    if (data) setSales(data as SaleRow[]);
   }
 
   async function handleSubmit() {
@@ -82,10 +96,17 @@ export default function FinishedStock() {
       is_own_block: block?.is_own_block,
     });
 
-    // Mark block as ready_to_sell
-    await supabase.from("blocks").update({ status: "ready_to_sell" }).eq("id", selectedBlock);
+    const { error: statusError } = await supabase
+      .from("blocks")
+      .update({ status: "ready_to_sell", slab_count: slabCount ? Number(slabCount) : null })
+      .eq("id", selectedBlock);
 
     setLoading(false);
+
+    if (statusError) {
+      setMessage("Save failed: " + statusError.message);
+      return;
+    }
 
     if (error) {
       setMessage("❌ " + error.message);
@@ -94,6 +115,7 @@ export default function FinishedStock() {
       setSelectedBlock("");
       setFinish("Polished");
       setThickness("18mm");
+      setSlabCount("");
       setNotes("");
       fetchFinishedBlocks();
       fetchEntries();
@@ -198,6 +220,17 @@ export default function FinishedStock() {
           </div>
         </div>
 
+        <div style={{ marginBottom: 14 }}>
+          <label style={S.label}>Slab Count</label>
+          <input
+            type="number"
+            value={slabCount}
+            onChange={(e) => setSlabCount(e.target.value)}
+            placeholder="Number of slabs produced"
+            style={S.input}
+          />
+        </div>
+
         {/* Notes */}
         <div style={{ marginBottom: 16 }}>
           <label style={S.label}>Notes (Optional)</label>
@@ -235,6 +268,10 @@ export default function FinishedStock() {
             // Safety parser: Extract total_sqft correctly whether Supabase maps it as an object or single-item array
             const relatedBlock = Array.isArray(entry.blocks) ? entry.blocks[0] : entry.blocks;
             const liveSqft = relatedBlock?.total_sqft;
+            const soldSqft = sales
+              .filter((sale) => sale.block_id === entry.block_id)
+              .reduce((sum, sale) => sum + Number(sale.sqft_sold || 0), 0);
+            const availableSqft = Math.max(Number(liveSqft || 0) - soldSqft, 0);
 
             return (
               <div key={entry.id} style={{ background: "var(--code-bg)", border: "1px solid var(--border)", borderLeft: "3px solid #22c55e", borderRadius: 12, padding: 16, marginBottom: 10 }}>
@@ -250,14 +287,19 @@ export default function FinishedStock() {
                     
                     {/* Live Dynamic Square Footage Badge */}
                     <div style={{ fontSize: 11, color: "var(--text)", marginTop: 4 }}>
-                      Total Yield:{" "}
+                      Available:{" "}
                       <span style={{ 
-                        color: liveSqft && liveSqft > 0 ? "#22c55e" : "#d4a843", 
+                        color: availableSqft > 0 ? "#22c55e" : "#d4a843", 
                         fontWeight: 600 
                       }}>
-                        {liveSqft && liveSqft > 0 ? `${liveSqft.toLocaleString()} Sqft` : "Measured at sale"}
+                        {liveSqft && liveSqft > 0 ? `${availableSqft.toLocaleString()} Sqft` : "Measured at sale"}
                       </span>
                     </div>
+                    {liveSqft && soldSqft > 0 && (
+                      <div style={{ fontSize: 10, color: "var(--text)", marginTop: 2 }}>
+                        Sold {soldSqft.toLocaleString("en-IN")} of {Number(liveSqft).toLocaleString("en-IN")} Sqft
+                      </div>
+                    )}
 
                   </div>
                 </div>

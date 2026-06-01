@@ -138,15 +138,11 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
 function Brand() {
   return (
     <div className="erp-brand">
-      <div className="erp-logo" aria-hidden="true">
-        <span>M</span>
-        <span>L</span>
-        <span>G</span>
-      </div>
-      <div>
-        <div className="erp-brand-name">Mahalaxmi ERP</div>
-        <div className="erp-brand-sub">Granite Operations</div>
-      </div>
+      <img
+        src="/logo-horizontal-light.svg"
+        alt="Mahalaxmi Granites"
+        className="erp-brand-logo"
+      />
     </div>
   );
 }
